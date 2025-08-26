@@ -41,7 +41,18 @@ export function parseData(data) {
 
 export function formatTitle(item) {
     const rawTitle = item.rawTitle;
-    return rawTitle;
+    // Podziel tytuł na słowa
+    const words = rawTitle.split(' ');
+    
+    // Przetwórz pierwsze trzy słowa aby zaczynały się wielką literą
+    const processedWords = words.map((word, index) => {
+        if (index < 3) {
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }
+        return word;
+    });
+    
+    return processedWords.join(' ');
 }
 
 export function formatItem(item) {
@@ -50,8 +61,20 @@ export function formatItem(item) {
     const isAccessory = item.isAccessory;
 
     // Extract size from title
-    const sizeMatch = rawTitle.match(/size\s+([^\s]+)/i);
-    const size = sizeMatch ? sizeMatch[1].toUpperCase() : '';
+    let size = '';
+    
+    // Sprawdź najpierw "size" z numerem/literą
+    const sizeWithWordMatch = rawTitle.match(/size\s+([^\s]+)/i);
+    if (sizeWithWordMatch) {
+        size = sizeWithWordMatch[1].toUpperCase();
+    } else {
+        // Sprawdź samodzielne oznaczenia rozmiaru
+        const sizeRegex = /\b(XS|S|M|L|XL|XXL|XXXL|[2-5]?XL|(?:2[0-9]|3[0-9]|4[0-9]|50))\b/i;
+        const standaloneSizeMatch = rawTitle.match(sizeRegex);
+        if (standaloneSizeMatch) {
+            size = standaloneSizeMatch[1].toUpperCase();
+        }
+    }
 
     // Extract condition
     const condition = rawTitle.includes('bez wad') ? 'Stan idealny / Bez wad' : 'Stan dobry';
@@ -62,18 +85,32 @@ export function formatItem(item) {
     if (!isAccessory) {
         // For regular items, process all measurements
         details.forEach(detail => {
-            const parts = detail.split(' ');
-            if (parts.length >= 2) {
-                if (parts[0].toLowerCase() === 'p' || parts[0].toLowerCase() === 'pas') {
-                    measurements.push(`Pas ${parts[1]} cm`);
-                } else if (parts[0].toLowerCase() === 'd' || parts[0].toLowerCase() === 'dl') {
-                    measurements.push(`Długość ${parts[1]} cm`);
-                } else if (parts[0].toLowerCase() === 's') {
-                    measurements.push(`Szerokość ${parts[1]} cm`);
-                } else if (parts[0].toLowerCase() === 'u') {
-                    measurements.push(`Udo ${parts[1]} cm`);
-                } else if (parts[0].toLowerCase() === 'n') {
-                    measurements.push(`Nogawka ${parts[1]} cm`);
+            // Rozdziel tekst na słowa, ignorując wielokrotne spacje
+            const parts = detail.trim().split(/\s+/);
+            
+            // Przetwarzaj parami (typ pomiaru + wartość)
+            for (let i = 0; i < parts.length - 1; i++) {
+                const type = parts[i].toLowerCase();
+                const value = parts[i + 1];
+                
+                // Sprawdź czy wartość jest liczbą
+                if (!isNaN(value)) {
+                    if (type === 'p' || type === 'pas') {
+                        measurements.push(`Pas ${value} cm`);
+                        i++; // Przeskocz następny element, bo już go użyliśmy
+                    } else if (type === 'd' || type === 'dl') {
+                        measurements.push(`Długość ${value} cm`);
+                        i++;
+                    } else if (type === 's') {
+                        measurements.push(`Szerokość ${value} cm`);
+                        i++;
+                    } else if (type === 'u') {
+                        measurements.push(`Udo ${value} cm`);
+                        i++;
+                    } else if (type === 'n') {
+                        measurements.push(`Nogawka ${value} cm`);
+                        i++;
+                    }
                 }
             }
         });
@@ -87,19 +124,19 @@ export function formatItem(item) {
         .trim();
 
     // Format the output
-    const titleSection = cleanTitle;
-    const stateSection = "**stan:** " + condition;
+    const titleSection = "🌟 " + cleanTitle + " 🌟";
+    const stateSection = "📌 **Stan:** " + condition;
     const sizeSection = !isAccessory && size ? 
-        "**rozmiar:** " + size : 
-        "**rozmiar:** uniwersalny";
+        "📏 **Rozmiar:** " + size : 
+        "📏 **Rozmiar:** uniwersalny";
     
     const measurementsSection = !isAccessory && measurements.length > 0 ? 
-        "\n**wymiary:**\n" + measurements.join('\n') : 
+        "\n📐 **Wymiary:**\n" + measurements.join('\n') : 
         '';
 
-    let output = "Jak chcesz wiedzieć wcześniej o itemach zapraszam na instagram kamochi.store\n\n";
+    let output = "💎 Jak chcesz wiedzieć wcześniej o itemach zapraszam na instagram kamochi.store 💎\n\n";
     output += titleSection + "\n\n";
-    output += "**stan:** " + condition + "\n";
+    output += stateSection + "\n";
     output += sizeSection;
     if (measurementsSection) output += measurementsSection;
     output += "\n\n" + tagsTemplate;
