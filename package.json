@@ -1,0 +1,13 @@
+{
+  "name": "aplikacja-do-ogloszen",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun run src/dev.ts",
+    "build": "bun build src/main.ts --outdir dist",
+    "start": "bun run src/server.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {}
+}
