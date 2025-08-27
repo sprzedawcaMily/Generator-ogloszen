@@ -490,11 +490,9 @@ bluza y3 szara m
 d67 s55
 
 bluza ecko unltd z lat 90 XL
-
 d70 s65
 
 toy machine XL tis
-
 d74 s60
 
 dada supreme spodenki krotkie zielone 32

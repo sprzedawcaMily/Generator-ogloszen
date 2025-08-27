@@ -16,16 +16,23 @@ export function parseData(data) {
                           line.toLowerCase().includes('bucket');
         
         // Sprawdź czy to jest linia z wymiarami
-        const hasMeasurements = line.match(/^[pdsun]\s*\d+/i);
+        const hasMeasurements = /^(?:(?:p|d|dl|s|u|n|pas|szer|udo|nog|dł)\s*\d+|p\d+\s+dl\s*\d+|dl\s*\d+\s+s\d+)\s*$/i.test(line);
 
         // Sprawdź czy linia zawiera nazwy ubrań
-        const hasClothingWord = /\b(bluza|spodnie|koszulka|kurtka|jeansy|szorty|jersey|longsleeve|spodenki|catana|bomberka|koszula)\b/i.test(line);
+        const hasClothingWord = /\b(bluza|spodnie|koszulka|kurtka|jeansy|szorty|jersey|longsleeve|spodenki|catana|bomberka|koszula|dresy|dress)\b/i.test(line);
         
-        // Sprawdź czy linia zawiera rozmiar
-        const hasSize = line.toLowerCase().includes('size') || /\b(xs|s|m|l|xl|xxl|xxxl|\d+xl|\d+\/?\d*)\b/i.test(line);
+        // Sprawdź czy to jest opis stanu/wyglądu
+        const hasConditionDesc = /\b(poszarpane|poplamione|bez wad|z wadami|cracking|dziurki|przetarcia)\b/i.test(line);
+        
+        // Sprawdź czy linia zawiera rozmiar lub znane marki
+        const hasSize = line.toLowerCase().includes('size') || 
+                       /\b(xs|s|m|l|xl|xxl|xxxl|\d+xl|\d+\/?\d*)\b/i.test(line);
+                       
+        // Sprawdź czy linia zawiera znane marki
+        const hasBrand = /\b(ecko|phat|rydel|fishbone|fubu|southpole|nike|adidas|jigga|toy|machine)\b/i.test(line);
 
         // Sprawdź czy to nowy przedmiot
-        const isNewItem = !hasMeasurements && (isAccessory || hasClothingWord || hasSize);
+        const isNewItem = !hasMeasurements && (isAccessory || hasClothingWord || hasSize || hasBrand || hasConditionDesc);
         
         console.log('Processing line:', {
             line,
@@ -103,34 +110,56 @@ export function formatItem(item) {
     if (!isAccessory) {
         // For regular items, process all measurements
         details.forEach(detail => {
-            // Rozdziel tekst na słowa, ignorując wielokrotne spacje
-            const parts = detail.trim().split(/\s+/);
+            console.log('Processing measurement detail:', detail);
             
-            // Przetwarzaj parami (typ pomiaru + wartość)
-            for (let i = 0; i < parts.length - 1; i++) {
-                const type = parts[i].toLowerCase();
-                const value = parts[i + 1];
+            // Podziel linię na części
+            const parts = detail.split(/\s+/);
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i].toLowerCase();
+                const nextPart = parts[i + 1];
                 
-                // Sprawdź czy wartość jest liczbą
-                if (!isNaN(value)) {
-                    if (type === 'p' || type === 'pas') {
-                        measurements.push(`Pas ${value} cm`);
-                        i++; // Przeskocz następny element, bo już go użyliśmy
-                    } else if (type === 'd' || type === 'dl') {
-                        measurements.push(`Długość ${value} cm`);
-                        i++;
-                    } else if (type === 's') {
-                        measurements.push(`Szerokość ${value} cm`);
-                        i++;
-                    } else if (type === 'u') {
-                        measurements.push(`Udo ${value} cm`);
-                        i++;
-                    } else if (type === 'n') {
-                        measurements.push(`Nogawka ${value} cm`);
-                        i++;
+                // Sprawdź czy aktualna część to oznaczenie wymiaru
+                if (/^(p|d|dl|dł|s|u|n|pas|szer|udo|nog)$/i.test(part)) {
+                    // Sprawdź czy następna część to liczba
+                    if (nextPart && /^\d+$/.test(nextPart)) {
+                        const value = nextPart;
+                        
+                        if (part === 'p' || part === 'pas') {
+                            measurements.push(`Pas ${value} cm`);
+                        } else if (part === 'd' || part === 'dl' || part === 'dł') {
+                            measurements.push(`Długość ${value} cm`);
+                        } else if (part === 's' || part === 'szer') {
+                            measurements.push(`Szerokość ${value} cm`);
+                        } else if (part === 'u' || part === 'udo') {
+                            measurements.push(`Udo ${value} cm`);
+                        } else if (part === 'n' || part === 'nog') {
+                            measurements.push(`Nogawka ${value} cm`);
+                        }
+                        i++; // Przeskocz następną część, bo już ją użyliśmy
+                    }
+                }
+                // Sprawdź czy to pomiar w formacie "d74"
+                else {
+                    const measureMatch = part.match(/^(p|d|dl|dł|s|u|n|pas|szer|udo|nog)(\d+)$/i);
+                    if (measureMatch) {
+                        const [_, type, value] = measureMatch;
+                        const typeLower = type.toLowerCase();
+                        
+                        if (typeLower === 'p' || typeLower === 'pas') {
+                            measurements.push(`Pas ${value} cm`);
+                        } else if (typeLower === 'd' || typeLower === 'dl' || typeLower === 'dł') {
+                            measurements.push(`Długość ${value} cm`);
+                        } else if (typeLower === 's' || typeLower === 'szer') {
+                            measurements.push(`Szerokość ${value} cm`);
+                        } else if (typeLower === 'u' || typeLower === 'udo') {
+                            measurements.push(`Udo ${value} cm`);
+                        } else if (typeLower === 'n' || typeLower === 'nog') {
+                            measurements.push(`Nogawka ${value} cm`);
+                        }
                     }
                 }
             }
+            console.log('Found measurements:', measurements);
         });
     }
 
