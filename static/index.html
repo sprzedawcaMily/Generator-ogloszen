@@ -139,8 +139,23 @@
 
     <div id="messageBox" class="message-box"></div>
     <script type="module">
-        import { data } from '/src/data.js';
+        import { data, initializeData } from '/src/data.js';
         import { parseData, formatItem, formatTitle } from '/src/formatter.js';
+        
+        // Initialize data when the page loads
+        async function init() {
+            try {
+                await initializeData();
+                // After data is loaded, you might want to update any UI elements
+                console.log('Data loaded successfully');
+            } catch (error) {
+                console.error('Failed to load data:', error);
+                showMessage('Błąd podczas ładowania danych. Spróbuj ponownie.');
+            }
+        }
+        
+        // Start initialization
+        init();
         
         function showMessage(text) {
             const messageBox = document.getElementById('messageBox');

@@ -7,16 +7,16 @@ export function parseData(data) {
     const items = [];
     let currentItem = null;
 
-    lines.forEach(line => {
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const nextLine = i < lines.length - 1 ? lines[i + 1] : null;
+
         // Sprawdź czy to jest akcesoria
         const isAccessory = line.toLowerCase().includes('okulary') || 
                           line.toLowerCase().includes('plecak') ||
                           line.toLowerCase().includes('czapka') ||
                           line.toLowerCase().includes('klapki') ||
                           line.toLowerCase().includes('bucket');
-        
-        // Sprawdź czy to jest linia z wymiarami
-        const hasMeasurements = /^(?:(?:p|d|dl|s|u|n|pas|szer|udo|nog|dł)\s*\d+|p\d+\s+dl\s*\d+|dl\s*\d+\s+s\d+)\s*$/i.test(line);
 
         // Sprawdź czy linia zawiera nazwy ubrań
         const hasClothingWord = /\b(bluza|spodnie|koszulka|kurtka|jeansy|szorty|jersey|longsleeve|spodenki|catana|bomberka|koszula|dresy|dress)\b/i.test(line);
@@ -24,40 +24,52 @@ export function parseData(data) {
         // Sprawdź czy to jest opis stanu/wyglądu
         const hasConditionDesc = /\b(poszarpane|poplamione|bez wad|z wadami|cracking|dziurki|przetarcia)\b/i.test(line);
         
-        // Sprawdź czy linia zawiera rozmiar lub znane marki
+        // Sprawdź czy linia zawiera rozmiar
         const hasSize = line.toLowerCase().includes('size') || 
                        /\b(xs|s|m|l|xl|xxl|xxxl|\d+xl|\d+\/?\d*)\b/i.test(line);
-                       
+        
         // Sprawdź czy linia zawiera znane marki
         const hasBrand = /\b(ecko|phat|rydel|fishbone|fubu|southpole|nike|adidas|jigga|toy|machine)\b/i.test(line);
 
-        // Sprawdź czy to nowy przedmiot
-        const isNewItem = !hasMeasurements && (isAccessory || hasClothingWord || hasSize || hasBrand || hasConditionDesc);
-        
+        // Sprawdź czy to jest linia z wymiarami
+        const measurementPattern = /^(?:(?:p|d|dł|dl|s|sz|szer|u|ch|n|pas|szerkoszc|udo|nog|nogawa|nogawka|długość|dlugosc|długosc|dlugość)\s*\d+\s*)+$/i;
+        const isMeasurementLine = measurementPattern.test(line);
+
+        // Sprawdź czy to główna linia opisu przedmiotu
+        const isMainDescription = !isMeasurementLine && (hasClothingWord || hasSize || hasBrand || hasConditionDesc || isAccessory);
+
         console.log('Processing line:', {
             line,
-            isAccessory,
-            hasMeasurements,
-            hasClothingWord,
-            hasSize,
-            isNewItem
+            isMainDescription,
+            isMeasurementLine,
+            nextLine: nextLine ? 'exists' : 'none'
         });
 
-        if (line && isNewItem) {
+        if (isMainDescription) {
+            // Jeśli mamy poprzedni przedmiot, dodaj go do listy
             if (currentItem) {
                 items.push(currentItem);
-                console.log('Added item:', currentItem);
             }
+            
+            // Utwórz nowy przedmiot
             currentItem = { rawTitle: line, details: [], isAccessory };
-            console.log('Created new item:', currentItem);
-        } else if (currentItem && !line.includes(tagsTemplate)) {
+
+            // Sprawdź czy następna linia zawiera wymiary
+            if (nextLine && measurementPattern.test(nextLine)) {
+                currentItem.details.push(nextLine);
+                i++; // Pomiń następną linię bo już ją dodaliśmy
+            }
+        }
+        // Jeśli to nie jest linia z tagami i mamy aktualny przedmiot
+        else if (!line.includes(tagsTemplate) && currentItem) {
+            // Jeśli to linia z wymiarami lub inna linia szczegółów
             currentItem.details.push(line);
         }
-    });
+    }
 
+    // Dodaj ostatni przedmiot
     if (currentItem) {
         items.push(currentItem);
-        console.log('Added final item:', currentItem);
     }
 
     console.log('Total items found:', items.length);
@@ -126,13 +138,13 @@ export function formatItem(item) {
                         
                         if (part === 'p' || part === 'pas') {
                             measurements.push(`Pas ${value} cm`);
-                        } else if (part === 'd' || part === 'dl' || part === 'dł') {
+                        } else if (part === 'd' || part === 'dl' || part === 'dł' || part === 'długość' || part === 'dlugosc') {
                             measurements.push(`Długość ${value} cm`);
                         } else if (part === 's' || part === 'szer') {
                             measurements.push(`Szerokość ${value} cm`);
                         } else if (part === 'u' || part === 'udo') {
                             measurements.push(`Udo ${value} cm`);
-                        } else if (part === 'n' || part === 'nog') {
+                        } else if (part === 'n' || part === 'nog' || part === 'nogawa') {
                             measurements.push(`Nogawka ${value} cm`);
                         }
                         i++; // Przeskocz następną część, bo już ją użyliśmy
