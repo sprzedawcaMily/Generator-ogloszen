@@ -1,6 +1,9 @@
 $sourcePath = $PSScriptRoot
 $zipPath = Join-Path $PSScriptRoot "aplikacja-do-ogloszen.zip"
 
+# Zatrzymaj serwer Bun jeśli działa
+taskkill /F /IM bun.exe 2>$null
+
 # Usuń stary plik ZIP jeśli istnieje
 if (Test-Path $zipPath) {
     Remove-Item $zipPath
@@ -12,7 +15,8 @@ $filesToInclude = @(
     "static",
     "package.json",
     "tsconfig.json",
-    "INSTRUKCJA.md"
+    "INSTRUKCJA.md",
+    "instaluj-bun.ps1"
 )
 
 # Utwórz tymczasowy folder
@@ -33,3 +37,12 @@ Compress-Archive -Path "$tempFolder\*" -DestinationPath $zipPath -Force
 Remove-Item -Path $tempFolder -Recurse -Force
 
 Write-Host "Plik ZIP został utworzony: $zipPath"
+
+# Uruchom serwer ponownie
+try {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    Start-Process -NoNewWindow -FilePath "bun.exe" -ArgumentList "run", "dev"
+    Write-Host "Serwer został ponownie uruchomiony"
+} catch {
+    Write-Host "Nie udało się automatycznie uruchomić serwera. Uruchom go ręcznie komendą: bun run dev"
+}
