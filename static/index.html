@@ -56,17 +56,25 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            padding: 0.75rem 1.25rem;
+            padding: 1rem 1.5rem;
+            margin: 0.5rem;
+            height: 3.5rem;
             border-radius: 0.75rem;
             font-weight: 600;
+            font-size: 1.1rem;
             transition: all 0.2s;
             text-align: center;
             background-color: #6366f1;
             color: white;
             white-space: nowrap;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         .copy-button:hover {
             background-color: #4f46e5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
         }
         .title-button {
             background-color: #f3f4f6;
@@ -185,8 +193,21 @@
                 const formattedItem = formatItem(item);
                 previewContainer.innerHTML = formattedItem.replace(/\n/g, '<br>');
 
+                // Dodaj przycisk rozwijania
+                const expandButton = document.createElement('div');
+                expandButton.className = 'expand-button';
+                expandButton.innerHTML = 'Pokaż więcej ▼';
+                
+                // Dodaj funkcję rozwijania/zwijania
+                expandButton.onclick = () => {
+                    previewContainer.classList.toggle('expanded');
+                    expandButton.innerHTML = previewContainer.classList.contains('expanded') ? 'Pokaż mniej ▲' : 'Pokaż więcej ▼';
+                };
+                
+                previewContainer.appendChild(expandButton);
+
                 const buttonContainer = document.createElement('div');
-                buttonContainer.className = 'flex flex-row justify-start gap-2';
+                buttonContainer.className = 'flex flex-col md:flex-row justify-center gap-4 mt-4';
 
                 const copyTitleButton = document.createElement('button');
                 copyTitleButton.className = 'copy-button title-button flex-1';

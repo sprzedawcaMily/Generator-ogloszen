@@ -1,9 +1,7 @@
 import { tagsTemplate } from './data.js';
 
 export function parseData(data) {
-    console.log('Parsing data:', data.substring(0, 100) + '...');
     const lines = data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    console.log('Found lines:', lines.length);
     const items = [];
     let currentItem = null;
 
@@ -16,7 +14,7 @@ export function parseData(data) {
                           line.toLowerCase().includes('bucket');
         
         // Sprawdź czy to jest linia z wymiarami
-        const hasMeasurements = line.match(/^[pdsun]\s*\d+/i);
+        const isMeasurement = line.match(/^[pdsun]\s*\d+/i);
 
         // Sprawdź czy linia zawiera nazwy ubrań
         const hasClothingWord = /\b(bluza|spodnie|koszulka|kurtka|jeansy|szorty|jersey|longsleeve|spodenki|catana|bomberka|koszula)\b/i.test(line);
@@ -25,24 +23,13 @@ export function parseData(data) {
         const hasSize = line.toLowerCase().includes('size') || /\b(xs|s|m|l|xl|xxl|xxxl|\d+xl|\d+\/?\d*)\b/i.test(line);
 
         // Sprawdź czy to nowy przedmiot
-        const isNewItem = !hasMeasurements && (isAccessory || hasClothingWord || hasSize);
+        const isNewItem = !isMeasurement && (isAccessory || hasClothingWord || hasSize);
         
-        console.log('Processing line:', {
-            line,
-            isAccessory,
-            hasMeasurements,
-            hasClothingWord,
-            hasSize,
-            isNewItem
-        });
-
         if (line && isNewItem) {
             if (currentItem) {
                 items.push(currentItem);
-                console.log('Added item:', currentItem);
             }
             currentItem = { rawTitle: line, details: [], isAccessory };
-            console.log('Created new item:', currentItem);
         } else if (currentItem && !line.includes(tagsTemplate)) {
             currentItem.details.push(line);
         }
@@ -50,10 +37,8 @@ export function parseData(data) {
 
     if (currentItem) {
         items.push(currentItem);
-        console.log('Added final item:', currentItem);
     }
 
-    console.log('Total items found:', items.length);
     return items;
 }
 
