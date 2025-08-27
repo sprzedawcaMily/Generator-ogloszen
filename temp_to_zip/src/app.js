@@ -1,5 +1,20 @@
-import { data, tagsTemplate, measurementMap, brandMap } from './data.js';
+import { data, tagsTemplate, measurementMap, brandMap, initializeData } from './data.js';
 import { formatItem, formatTitle, parseData } from './formatter.js';
+
+// Initialize data when the app starts
+async function init() {
+    try {
+        await initializeData();
+        // After data is loaded, you might want to update the UI
+        console.log('Data loaded successfully');
+    } catch (error) {
+        console.error('Failed to load data:', error);
+        showMessage('Błąd podczas ładowania danych. Spróbuj ponownie.');
+    }
+}
+
+// Start initialization
+init();
 
 function showMessage(text) {
     const messageBox = document.getElementById('messageBox');

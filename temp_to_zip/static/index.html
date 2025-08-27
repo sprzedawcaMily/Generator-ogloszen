@@ -102,6 +102,17 @@
             opacity: 1;
             visibility: visible;
         }
+        .url-input-container input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+        .url-input-container button:hover {
+            background-color: #4f46e5;
+        }
+        .url-input-container button:active {
+            background-color: #4338ca;
+        }
         .preview-container {
             background-color: #ffffff;
             border: 1px dashed #d1d5db;
@@ -132,6 +143,15 @@
             Kliknij "Kopiuj Opis" lub "Kopiuj Tytuł", aby otrzymać całą treść gotową do wklejenia.
         </p>
 
+        <div class="url-input-container" style="margin: 20px 0; text-align: center;">
+            <input type="text" id="notionUrl" placeholder="Wklej link do strony Notion" 
+                   style="width: 80%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; margin-right: 10px;">
+            <button id="loadDataButton"
+                    style="padding: 10px 20px; background-color: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                Załaduj dane
+            </button>
+        </div>
+
         <div id="itemsContainer">
             <!-- Tutaj będą generowane elementy z listy -->
         </div>
@@ -139,8 +159,62 @@
 
     <div id="messageBox" class="message-box"></div>
     <script type="module">
-        import { data } from '/src/data.js';
+        import { data, initializeData } from '/src/data.js';
         import { parseData, formatItem, formatTitle } from '/src/formatter.js';
+        
+        // Function to load new data from Notion URL
+        async function loadNewData() {
+            const urlInput = document.getElementById('notionUrl');
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                showMessage('Proszę podać link do strony Notion');
+                return;
+            }
+
+            try {
+                await initializeData(url);
+                await refreshItemsList();
+                showMessage('Dane zostały zaktualizowane pomyślnie');
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showMessage('Błąd podczas ładowania danych. Sprawdź link i spróbuj ponownie.');
+            }
+        }
+
+        // Set up event listener for the load button
+        document.getElementById('loadDataButton').addEventListener('click', loadNewData);
+
+        // Refresh items list
+        async function refreshItemsList() {
+            const container = document.getElementById('itemsContainer');
+            container.innerHTML = ''; // Clear current items
+            
+            const items = parseData(data());
+            items.forEach((item, index) => {
+                const formattedTitle = formatTitle(item);
+                const formattedItem = formatItem(item);
+                
+                // Create and append item card
+                const card = createItemCard(formattedTitle, formattedItem, index + 1);
+                container.appendChild(card);
+            });
+        }
+
+        // Initialize data when the page loads
+        async function init() {
+            try {
+                await initializeData();
+                await refreshItemsList();
+                console.log('Data loaded successfully');
+            } catch (error) {
+                console.error('Failed to load data:', error);
+                showMessage('Błąd podczas ładowania danych. Spróbuj ponownie.');
+            }
+        }
+        
+        // Start initialization
+        init();
         
         function showMessage(text) {
             const messageBox = document.getElementById('messageBox');

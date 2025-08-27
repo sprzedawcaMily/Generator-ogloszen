@@ -1,5 +1,29 @@
-const data = `
-Bluzy, Kurtki, Jeansy i Akcesoria
+import { fetchNotionData, getLastUrl } from './notionFetcher.js';
+
+// Default empty data structure
+let currentData = `Bluzy, Kurtki, Jeansy i Akcesoria`;
+
+// Initialize data from Notion
+export async function initializeData(notionUrl = null) {
+    try {
+        const url = notionUrl || getLastUrl() || 'https://deep-coach-394.notion.site/wymiary-08-14-2025-24fc8943cc7f804c8aebc7bd513e598a';
+        console.log('Fetching data from Notion URL:', url);
+        const content = await fetchNotionData(url);
+        currentData = `Bluzy, Kurtki, Jeansy i Akcesoria\n${content}`;
+        return currentData;
+    } catch (error) {
+        console.error('Error initializing data:', error);
+        throw error;
+    }
+}
+
+// Getter function for the current data
+export function getData() {
+    return currentData;\n${content}`;
+        return data;
+    } catch (error) {
+        console.error('Error initializing data:', error);
+        throw error;
 roca wear jersey długi rękaw, granatowy, size L bez wad
 d 77 s 60
 
@@ -711,4 +735,4 @@ const brandMap = {
     // ... reszta marek
 };
 
-export { data, tagsTemplate, measurementMap, brandMap };
+export { getData as data, tagsTemplate, measurementMap, brandMap };
