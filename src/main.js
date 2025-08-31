@@ -7,6 +7,73 @@ function updateDebug(message) {
     console.log(message);
 }
 
+// Function to get shortened version of product type
+function getShortenedProductType(rodzaj) {
+    if (!rodzaj) return '';
+    
+    const typeMap = {
+        'kurtka': 'Kurtka',
+        'Koszule w kratkę': 'Koszula',
+        'Koszule dżinsowe': 'Koszula',
+        'Koszule gładkie': 'Koszula',
+        'Koszulki z nadrukiem': 'Koszulka',
+        'Koszule w paski': 'Koszula',
+        'T-shirty gładkie': 'T-shirt',
+        'T-shirty z nadrukiem': 'T-shirt',
+        'T-shirty w paski': 'T-shirt',
+        'Koszulki polo': 'Polo',
+        'Koszulki z długim rękawem': 'Koszulka',
+        'Podkoszulki': 'Podkoszulka',
+        'Bluzy': 'Bluza',
+        'Swetry i bluzy z kapturem': 'Bluza',
+        'Bluzy rozpinane': 'Bluza',
+        'Kardigany': 'Kardigan',
+        'Swetry z okrągłym dekoltem': 'Sweter',
+        'Swetry w serek': 'Sweter',
+        'Swetry z golfem': 'Sweter',
+        'Długie swetry': 'Sweter',
+        'Swetry z dzianiny': 'Sweter',
+        'Kamizelki': 'Kamizelka',
+        'Spodnie z szerokimi nogawkami': 'Spodnie',
+        'Szorty cargo': 'Szorty',
+        'Szorty chinosy': 'Szorty',
+        'Szorty dżinsowe': 'Szorty',
+        'Mokasyny, buty żeglarskie, loafersy': 'Mokasyny',
+        'Chodaki i mule': 'Chodaki',
+        'Espadryle': 'Espadryle',
+        'Klapki i japonki': 'Klapki',
+        'Obuwie wizytowe': 'Buty',
+        'Sandały': 'Sandały',
+        'Kapcie': 'Kapcie',
+        'Obuwie sportowe': 'Buty',
+        'Sneakersy, trampki i tenisówki': 'Sneakersy',
+        'Chusty i chustki': 'Chusta',
+        'Paski': 'Pasek',
+        'Szelki': 'Szelki',
+        'Rękawiczki': 'Rękawiczki',
+        'Chusteczki': 'Chusteczka',
+        'Kapelusze i czapki': 'Czapka',
+        'Biżuteria': 'Biżuteria',
+        'Poszetki': 'Poszetka',
+        'Szaliki i szale': 'Szalik',
+        'Okulary przeciwsłoneczne': 'Okulary',
+        'Krawaty i muszki': 'Krawat',
+        'Zegarki': 'Zegarek',
+        'Plecaki': 'Plecak',
+        'Teczki': 'Teczka',
+        'Nerki': 'Nerka',
+        'Pokrowce na ubrania': 'Pokrowiec',
+        'Torby na siłownię': 'Torba',
+        'Torby podróżne': 'Torba',
+        'Walizki': 'Walizka',
+        'Listonoszki': 'Listonoszka',
+        'Torby na ramię': 'Torba',
+        'Portfele': 'Portfel'
+    };
+    
+    return typeMap[rodzaj] || rodzaj;
+}
+
 // Fetch style by product type
 async function fetchStyleByType(productType) {
     try {
@@ -70,7 +137,7 @@ async function createAdvertisementCard(ad, index, styles) {
     
     let title = '';
     if (ad.marka) title += ad.marka + ' ';
-    if (ad.rodzaj) title += ad.rodzaj + ' ';
+    if (ad.rodzaj) title += getShortenedProductType(ad.rodzaj) + ' ';
     if (ad.rozmiar) title += ad.rozmiar + ' ';
     
     // Add description_text from style_templates based on product type
@@ -238,6 +305,9 @@ async function generateAdvertisementDescription(ad, styles, descriptionHeaders) 
     if (ad.dlugosc) {
         description += `Długość ${ad.dlugosc} cm\n`;
     }
+    if (ad.szerokosc) {
+        description += `Szerokość ${ad.szerokosc} cm\n`;
+    }
     if (ad.udo) {
         description += `Udo ${ad.udo} cm\n`;
     }
@@ -264,7 +334,7 @@ async function copyAdvertisementTitle(ad, styles) {
         
         let title = '';
         if (ad.marka) title += ad.marka + ' ';
-        if (ad.rodzaj) title += ad.rodzaj + ' ';
+        if (ad.rodzaj) title += getShortenedProductType(ad.rodzaj) + ' ';
         if (ad.rozmiar) title += ad.rozmiar + ' ';
         
         // Add description_text from style_templates based on product type
