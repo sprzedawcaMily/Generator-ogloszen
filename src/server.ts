@@ -1,9 +1,11 @@
 import { serve } from "bun";
+import { fetchAdvertisements, fetchCompletedAdvertisements, fetchIncompleteAdvertisements, fetchStyles, fetchDescriptionHeaders, fetchStyleByType } from './supabaseFetcher';
 
 const server = serve({
     port: 3001,
-    fetch(req) {
+    async fetch(req) {
         const url = new URL(req.url);
+        console.log(`Otrzymano żądanie: ${url.pathname}`);
         
         try {
             // Ignoruj żądania devtools
@@ -11,9 +13,91 @@ const server = serve({
                 return new Response(null, { status: 404 });
             }
 
+            // Endpoint dla ukończonych reklam (domyślnie)
+            if (url.pathname === "/api/advertisements") {
+                const data = await fetchCompletedAdvertisements();
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
+            // Endpoint dla wszystkich reklam z Supabase
+            if (url.pathname === "/api/advertisements/all") {
+                const data = await fetchAdvertisements();
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
+            // Endpoint dla ukończonych reklam z Supabase
+            if (url.pathname === "/api/advertisements/completed") {
+                const data = await fetchCompletedAdvertisements();
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
+            // Endpoint dla nieukończonych reklam z Supabase
+            if (url.pathname === "/api/advertisements/incomplete") {
+                const data = await fetchIncompleteAdvertisements();
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
+            // Endpoint dla stylów z Supabase
+            if (url.pathname === "/api/styles") {
+                const data = await fetchStyles();
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
+            // Endpoint dla stylu według typu produktu
+            if (url.pathname.startsWith("/api/styles/") && url.pathname !== "/api/styles") {
+                const productType = decodeURIComponent(url.pathname.split("/").pop() || "");
+                console.log(`Searching for style with name: "${productType}"`);
+                if (productType) {
+                    const data = await fetchStyleByType(productType);
+                    console.log(`Found style data:`, data);
+                    return new Response(JSON.stringify(data), {
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+            }
+
+            // Endpoint dla nagłówków opisów z Supabase
+            if (url.pathname === "/api/description-headers") {
+                const data = await fetchDescriptionHeaders();
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
             // Obsługa głównej strony
             if (url.pathname === "/" || url.pathname === "/index.html") {
-                return new Response(Bun.file("./static/index.html"));
+                return new Response(Bun.file("./index.html"));
             }
             
             // Ignoruj żądania favicon.ico

@@ -1,5 +1,5 @@
-import { data, tagsTemplate, measurementMap, brandMap } from './data.js';
-import { formatItem, formatTitle, parseData } from './formatter.js';
+// Plik app.js nie jest już używany - zastąpiony przez main.js z integracją Supabase
+// Ten plik można usunąć
 
 function showMessage(text) {
     const messageBox = document.getElementById('messageBox');

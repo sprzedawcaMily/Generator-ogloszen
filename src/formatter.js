@@ -1,4 +1,5 @@
-import { tagsTemplate } from './data.js';
+// Przeniesione tagsTemplate bezpośrednio do pliku
+const tagsTemplate = `#hiphop #rap #skate #vintage #OG #90s #00s #y2k #baggy #szerokie #swag #drip #usa #fubu #southpole #fishbone #bigboy #polar #emo #rave #drain #tribal #dickies #carhartt #cargo #carpenter #boxy #kani #mass #clinic #jigga #metoda #elpolako #stoprocent #clinicmanufacture #clinicmfe #cnc #mfe #polskamarka #og #boxlogo #centerlogo #alien #ufo #ftp #pnb #tribal #graffiti #skate #sk8 #deskorolka #rap #hiphop #freestyle #mc #breakdance #bboy #drip #drill #y2k #90s #OOS #archive #rare #grail #error #jigga #malita #bottle #btl #b3 #befree #etylina #metodasport #morosport #mentor #mass #lenar #rydelhouse #blackzone #jnco #oldschool #boxyfit #fubu #sohk #southpole #karlkani #pellepelle #johnnyblaze #dadasupreme #sancezz #rawblue #drain #gang #cyber #edgy #alternative`;
 
 export function parseData(data) {
     console.log('Parsing data:', data.substring(0, 100) + '...');

@@ -9,5 +9,7 @@
   "devDependencies": {
     "typescript": "^5.9.2"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@supabase/supabase-js": "^2.56.1"
+  }
 }

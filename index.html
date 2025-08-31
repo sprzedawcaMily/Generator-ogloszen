@@ -3,10 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aplikacja do ogłoszeń</title>
+  <title>Generator Opisów Produktów</title>
+  <link rel="stylesheet" href="/src/styles.css">
+  <style>
+    #debug {
+      background: #f0f0f0;
+      padding: 10px;
+      margin: 10px;
+      font-family: monospace;
+      white-space: pre;
+    }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
-  <script type="module" src="./src/main.ts"></script>
+  <div id="app" class="container">
+    <h1>Generator Opisów Produktów</h1>
+    <div id="debug">Ładowanie...</div>
+    <div id="messageBox"></div>
+    <div id="itemsContainer"></div>
+  </div>
+  <script>
+    window.onerror = function(msg, url, line) {
+      document.getElementById('debug').textContent = `Błąd: ${msg}\nw: ${url}\nlinia: ${line}`;
+    }
+  </script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
