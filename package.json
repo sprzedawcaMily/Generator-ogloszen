@@ -4,12 +4,20 @@
   "scripts": {
     "dev": "bun run src/dev.ts",
     "build": "bun build src/main.ts --outdir dist",
-    "start": "bun run src/server.ts"
+    "start": "bun run src/server.ts",
+    "vinted": "bun run src/vintedAutomation.ts",
+    "vinted-existing": "bun run start-vinted-existing.ts",
+    "test-photos": "bun run test-photo-upload.ts",
+    "debug-vinted": "bun run debug-vinted.ts",
+    "debug-photos": "bun run debug-photo-upload.ts",
+    "chrome-debug": "powershell -ExecutionPolicy Bypass -File start-chrome-debug.ps1"
   },
   "devDependencies": {
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.56.1"
+    "@supabase/supabase-js": "^2.56.1",
+    "@types/puppeteer": "^7.0.4",
+    "puppeteer": "^24.17.1"
   }
 }
