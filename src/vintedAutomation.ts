@@ -425,6 +425,13 @@ export class VintedAutomation {
         try {
             console.log('🔗 Próbuję połączyć z istniejącą przeglądarką...');
             
+            // Sprawdź czy port 9222 jest dostępny
+            const isPortOpen = await this.checkDebugPort();
+            if (!isPortOpen) {
+                console.log('📡 Port 9222 nie jest dostępny');
+                return false;
+            }
+            
             // Połącz z Chrome uruchomionym z debug portem
             this.browser = await puppeteer.connect({
                 browserURL: 'http://localhost:9222',
@@ -461,6 +468,7 @@ export class VintedAutomation {
                 });
             }
             
+            console.log('✅ Pomyślnie połączono z istniejącą przeglądarką');
             return true;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -469,22 +477,84 @@ export class VintedAutomation {
         }
     }
 
+    async checkDebugPort(): Promise<boolean> {
+        try {
+            console.log('🔍 Sprawdzam port 9222...');
+            
+            // Użyj prostego timeout bez AbortSignal
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            const response = await fetch('http://localhost:9222/json/version', {
+                method: 'GET',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            const isOk = response.ok;
+            console.log(`📡 Port 9222 ${isOk ? 'dostępny' : 'niedostępny'}`);
+            return isOk;
+        } catch (error) {
+            console.log('❌ Błąd sprawdzania portu 9222:', error);
+            return false;
+        }
+    }
+
     async initWithExistingBrowser() {
+        console.log('🔍 Sprawdzenie czy Chrome jest uruchomiony z debug portem...');
+        
         // Sprawdź czy Chrome jest uruchomiony z debug portem
         const connected = await this.connectToExistingBrowser();
         
         if (!connected) {
+            console.log('❌ Nie znaleziono Chrome z debug portem');
             console.log('');
-            console.log('🚀 INSTRUKCJE UŻYCIA ISTNIEJĄCEJ PRZEGLĄDARKI:');
+            console.log('📋 WAŻNE: Jeśli Chrome jest już uruchomiony:');
+            console.log('   1. Zamknij wszystkie okna Chrome (Ctrl+Shift+Q)');
+            console.log('   2. Uruchom Chrome z debug portem (automatycznie...)');
             console.log('');
-            console.log('1. Zamknij wszystkie okna Chrome');
-            console.log('2. Uruchom Chrome z debug portem:');
-            console.log('   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\\temp\\chrome-debug"');
-            console.log('3. Zaloguj się na Vinted w tej przeglądarce');
-            console.log('4. Uruchom ponownie tę aplikację');
-            console.log('');
-            throw new Error('Nie można połączyć z przeglądarką. Postępuj zgodnie z instrukcjami powyżej.');
+            console.log('🚀 Automatycznie uruchamiam Chrome z debug portem...');
+            
+            const chromeStarted = await this.startChromeWithDebugPort();
+            
+            if (chromeStarted) {
+                console.log('✅ Chrome został uruchomiony z debug portem');
+                console.log('⏳ Czekam na uruchomienie Chrome...');
+                
+                // Czekaj 3 sekundy na uruchomienie Chrome
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                console.log('� Próbuję połączyć się z uruchomionym Chrome...');
+                
+                // Spróbuj połączyć się ponownie
+                const reconnected = await this.connectToExistingBrowser();
+                
+                if (reconnected) {
+                    console.log('✅ Pomyślnie połączono z Chrome!');
+                    // Kontynuuj normalnie - nie rzucaj błędu
+                } else {
+                    console.log('');
+                    console.log('�📱 WAŻNE: Zaloguj się teraz na Vinted w otwartej przeglądarce');
+                    console.log('🔄 Po zalogowaniu uruchom ponownie: bun run vinted');
+                    console.log('');
+                    throw new Error('CHROME_STARTED_PLEASE_LOGIN');
+                }
+            } else {
+                console.log('');
+                console.log('🚀 INSTRUKCJE RĘCZNEGO URUCHOMIENIA CHROME:');
+                console.log('');
+                console.log('1. Zamknij wszystkie okna Chrome');
+                console.log('2. Uruchom Chrome z debug portem:');
+                console.log('   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\\temp\\chrome-debug"');
+                console.log('3. Zaloguj się na Vinted w tej przeglądarce');
+                console.log('4. Uruchom ponownie: bun run vinted');
+                console.log('');
+                throw new Error('Nie można uruchomić Chrome automatycznie');
+            }
         }
+        
+        console.log('✅ Połączono z Chrome z debug portem');
         
         // Usuń właściwości automatyzacji
         if (this.page) {
@@ -516,6 +586,133 @@ export class VintedAutomation {
                     delete e['returnValue'];
                 });
             });
+        }
+    }
+
+    async startChromeWithDebugPort(): Promise<boolean> {
+        try {
+            // Najpierw sprawdź czy Chrome z debug portem już nie jest uruchomiony
+            console.log('🔍 Sprawdzam czy Chrome z debug portem już jest uruchomiony...');
+            const isAlreadyRunning = await this.checkDebugPort();
+            
+            if (isAlreadyRunning) {
+                console.log('✅ Chrome z debug portem już jest uruchomiony!');
+                console.log('� Korzystam z istniejącej przeglądarki...');
+                return true;
+            }
+            
+            console.log('�🔧 Sprawdzam czy Chrome jest zainstalowany...');
+            
+            // Możliwe ścieżki do Chrome na Windows
+            const chromePaths = [
+                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+                `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+                `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
+                `${process.env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe`
+            ];
+            
+            // Znajdź Chrome przez sprawdzenie czy plik istnieje
+            let chromePath = '';
+            const fs = await import('fs');
+            
+            console.log('🔍 Sprawdzam lokalizacje Chrome...');
+            for (const path of chromePaths) {
+                try {
+                    console.log(`   Sprawdzam: ${path}`);
+                    if (fs.existsSync(path)) {
+                        chromePath = path;
+                        console.log(`✅ Znaleziono Chrome: ${path}`);
+                        break;
+                    } else {
+                        console.log(`   ❌ Nie znaleziono w: ${path}`);
+                    }
+                } catch (error) {
+                    console.log(`   ⚠️ Błąd sprawdzania: ${path}`, error);
+                    // Kontynuuj szukanie
+                }
+            }
+            
+            if (!chromePath) {
+                console.log('❌ Nie znaleziono Chrome w standardowych lokalizacjach');
+                return false;
+            }
+            
+            console.log('🚀 Uruchamiam Chrome z debug portem...');
+            
+            // Utwórz unikalny katalog dla profilu debug w folderze użytkownika
+            const { execSync } = await import('child_process');
+            const userDir = process.env.USERPROFILE || process.env.HOME || '.';
+            let debugDir = `${userDir}\\AppData\\Local\\Temp\\chrome-debug-vinted-${Date.now()}`;
+            
+            try {
+                console.log(`📁 Tworzę katalog debug: ${debugDir}`);
+                execSync(`mkdir "${debugDir}"`, { stdio: 'ignore' });
+                console.log(`✅ Utworzono katalog debug`);
+            } catch (error) {
+                console.log('⚠️ Błąd tworzenia katalogu:', error);
+                // Spróbuj alternatywny katalog w bieżącym folderze
+                debugDir = `.\\chrome-debug-${Date.now()}`;
+                try {
+                    execSync(`mkdir "${debugDir}"`, { stdio: 'ignore' });
+                    console.log(`✅ Utworzono alternatywny katalog: ${debugDir}`);
+                } catch {
+                    console.log('❌ Nie można utworzyć katalogu debug');
+                    return false;
+                }
+            }
+            
+            // Zamknij istniejące procesy Chrome przed uruchomieniem nowego
+            console.log('🔄 Zamykam istniejące procesy Chrome...');
+            try {
+                const { execSync } = await import('child_process');
+                execSync('taskkill /F /IM chrome.exe 2>NUL', { stdio: 'ignore' });
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Czekaj 2 sekundy
+            } catch {
+                // Ignoruj błędy - może nie być procesów Chrome
+            }
+            
+            // Uruchom Chrome z debug portem w tle
+            console.log('🚀 Uruchamiam nowy Chrome z debug portem...');
+            console.log(`📁 Używając katalogu: ${debugDir}`);
+            const { spawn } = await import('child_process');
+            const chromeProcess = spawn(chromePath, [
+                '--remote-debugging-port=9222',
+                `--user-data-dir="${debugDir}"`,
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-default-apps',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-background-timer-throttling',
+                '--disable-renderer-backgrounding',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-ipc-flooding-protection',
+                'https://www.vinted.pl'
+            ], {
+                detached: false,  // Zmieniono na false dla lepszego debugowania
+                stdio: ['ignore', 'pipe', 'pipe']  // Pozwól na wyświetlanie błędów
+            });
+            
+            // Obsłuż błędy uruchamiania
+            chromeProcess.on('error', (error) => {
+                console.log('❌ Błąd uruchamiania Chrome:', error);
+            });
+            
+            chromeProcess.stderr?.on('data', (data) => {
+                console.log('⚠️ Chrome stderr:', data.toString());
+            });
+            
+            chromeProcess.unref(); // Pozwól procesowi działać niezależnie
+            
+            console.log('✅ Chrome uruchomiony z debug portem');
+            console.log('📱 Zaloguj się na Vinted w otwartej przeglądarce');
+            
+            return true;
+            
+        } catch (error) {
+            console.log('❌ Błąd podczas uruchamiania Chrome:', error);
+            return false;
         }
     }
 
@@ -1892,12 +2089,19 @@ export class VintedAutomation {
             
             console.log(`📁 Opening color dropdown...`);
             
-            // Kliknij dropdown koloru
-            await this.page.waitForSelector('input[data-testid="color-select-dropdown-input"]', { timeout: 10000 });
-            await this.page.click('input[data-testid="color-select-dropdown-input"]');
+            // Sprawdź czy dropdown jest już otwarty
+            const isDropdownOpen = await this.page.$('.web_ui__Cell__cell[id^="color-"]');
             
-            // Poczekaj na załadowanie listy kolorów
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            if (!isDropdownOpen) {
+                // Kliknij dropdown koloru
+                await this.page.waitForSelector('input[data-testid="color-select-dropdown-input"]', { timeout: 10000 });
+                await this.page.click('input[data-testid="color-select-dropdown-input"]');
+                
+                // Poczekaj na załadowanie listy kolorów
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            } else {
+                console.log('✅ Color dropdown already open');
+            }
             
             // Znajdź i kliknij odpowiedni kolor
             console.log(`🔍 Looking for color: "${targetColor}"`);
@@ -1921,12 +2125,66 @@ export class VintedAutomation {
                                 await checkbox.click();
                                 console.log(`✅ Selected color: ${titleText}`);
                                 colorSelected = true;
+                                
+                                // Poczekaj na aktualizację UI
+                                await new Promise(resolve => setTimeout(resolve, 1500));
+                                
+                                // Sprawdź czy kolor pozostał wybrany
+                                const isStillSelected = await this.verifyColorSelection(targetColor);
+                                if (!isStillSelected) {
+                                    console.log('⚠️  Color was deselected, trying JavaScript click...');
+                                    
+                                    // Użyj JavaScript click jako fallback
+                                    await this.page.evaluate((colorText) => {
+                                        const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
+                                        for (const el of colorElements) {
+                                            const titleEl = el.querySelector('.web_ui__Cell__title');
+                                            if (titleEl && titleEl.textContent?.trim().toLowerCase() === colorText.toLowerCase()) {
+                                                const checkbox = el.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                                                if (checkbox) {
+                                                    checkbox.checked = true;
+                                                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                        return false;
+                                    }, targetColor);
+                                    
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                }
+                                
                                 break;
                             } else {
                                 // Jeśli nie ma checkbox, kliknij na element
                                 await element.click();
                                 console.log(`✅ Selected color (by element click): ${titleText}`);
                                 colorSelected = true;
+                                
+                                // Poczekaj na aktualizację UI
+                                await new Promise(resolve => setTimeout(resolve, 1500));
+                                
+                                // Sprawdź czy kolor pozostał wybrany
+                                const isStillSelected = await this.verifyColorSelection(targetColor);
+                                if (!isStillSelected) {
+                                    console.log('⚠️  Color was deselected, trying JavaScript click...');
+                                    
+                                    // Użyj JavaScript click jako fallback
+                                    await this.page.evaluate((colorText) => {
+                                        const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
+                                        for (const el of colorElements) {
+                                            const titleEl = el.querySelector('.web_ui__Cell__title');
+                                            if (titleEl && titleEl.textContent?.trim().toLowerCase() === colorText.toLowerCase()) {
+                                                (el as HTMLElement).click();
+                                                return true;
+                                            }
+                                        }
+                                        return false;
+                                    }, targetColor);
+                                    
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                }
+                                
                                 break;
                             }
                         }
@@ -1943,13 +2201,46 @@ export class VintedAutomation {
                 console.log(`⚠️  Could not find color "${targetColor}" in the list`);
                 console.log('💡 Available colors can be selected manually');
             } else {
-                // Poczekaj na zamknięcie dropdown
+                // Zamknij dropdown klikając gdzieś indziej
+                console.log('🔄 Closing color dropdown...');
+                await this.page.click('body'); // Kliknij w tło
                 await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Sprawdź ponownie czy kolor jest wybrany
+                console.log('🔍 Final color verification...');
+                const finalCheck = await this.verifyColorSelection(targetColor);
+                if (finalCheck) {
+                    console.log('✅ Color selection confirmed');
+                } else {
+                    console.log('⚠️  Color selection may not have persisted');
+                }
             }
             
         } catch (error) {
             console.error('❌ Error selecting color:', error);
             console.log('💡 Możesz wybrać kolor ręcznie w przeglądarce');
+        }
+    }
+
+    async verifyColorSelection(expectedColor: string): Promise<boolean> {
+        if (!this.page) return false;
+        
+        try {
+            // Sprawdź czy dropdown koloru pokazuje wybrany kolor
+            const selectedValue = await this.page.$eval(
+                'input[data-testid="color-select-dropdown-input"]', 
+                el => (el as HTMLInputElement).value || el.getAttribute('value') || ''
+            );
+            
+            const isSelected = selectedValue.toLowerCase().includes(expectedColor.toLowerCase()) ||
+                              expectedColor.toLowerCase().includes(selectedValue.toLowerCase());
+            
+            console.log(`🔍 Color verification: expected "${expectedColor}", found "${selectedValue}", selected: ${isSelected}`);
+            return isSelected;
+            
+        } catch (error) {
+            console.log('❌ Could not verify color selection');
+            return false;
         }
     }
 
@@ -2000,22 +2291,62 @@ export class VintedAutomation {
             // Kliknij przycisk "Wersja robocza"
             console.log('💾 Saving as draft...');
             
+            // Sprawdź czy przycisk jest dostępny
             await this.page.waitForSelector('button[data-testid="upload-form-save-draft-button"]', { timeout: 10000 });
+            
+            // Sprawdź czy przycisk jest kliknny
+            const isClickable = await this.page.evaluate(() => {
+                const button = document.querySelector('button[data-testid="upload-form-save-draft-button"]') as HTMLButtonElement;
+                if (!button) return { exists: false };
+                
+                const rect = button.getBoundingClientRect();
+                const isVisible = rect.width > 0 && rect.height > 0;
+                const isEnabled = !button.disabled;
+                
+                return {
+                    exists: true,
+                    isVisible,
+                    isEnabled,
+                    text: button.textContent,
+                    canClick: isVisible && isEnabled
+                };
+            });
+            
+            console.log('🔍 Button state:', isClickable);
+            
+            if (!isClickable.canClick) {
+                console.log('⚠️  Button is not clickable, waiting 3 seconds...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
             
             // Zapisz aktualny URL przed kliknięciem
             const currentUrl = this.page.url();
             console.log(`📍 Current URL: ${currentUrl}`);
             
-            await this.page.click('button[data-testid="upload-form-save-draft-button"]');
+            // Użyj evaluate do bezpośredniego kliknięcia
+            const clicked = await this.page.evaluate(() => {
+                const button = document.querySelector('button[data-testid="upload-form-save-draft-button"]') as HTMLButtonElement;
+                if (button && !button.disabled) {
+                    button.click();
+                    return true;
+                }
+                return false;
+            });
             
-            console.log('✅ Successfully clicked "Wersja robocza" button');
+            if (clicked) {
+                console.log('✅ Successfully clicked "Wersja robocza" button via JavaScript');
+            } else {
+                console.log('❌ Failed to click "Wersja robocza" button');
+                throw new Error('Could not click draft button');
+            }
             console.log('⏳ Waiting for page redirect...');
             
-            // Czekaj na przekierowanie (zmianę URL)
+            // Czekaj na przekierowanie (zmianę URL) lub komunikat o sukcesie
             try {
+                // Opcja 1: Sprawdź przekierowanie
                 await this.page.waitForFunction(
                     (originalUrl) => window.location.href !== originalUrl,
-                    { timeout: 15000 },
+                    { timeout: 8000 },
                     currentUrl
                 );
                 console.log('✅ Page redirected successfully');
@@ -2025,7 +2356,22 @@ export class VintedAutomation {
                 console.log('✅ New page fully loaded');
                 
             } catch (redirectError) {
-                console.log('⚠️  No redirect detected, but draft might be saved');
+                console.log('⏳ No immediate redirect, checking for success indicators...');
+                
+                // Opcja 2: Sprawdź czy jest komunikat o sukcesie lub zmiana na stronie
+                try {
+                    await this.page.waitForSelector('.success-message, .draft-saved, [data-testid*="success"]', { timeout: 5000 });
+                    console.log('✅ Success indicator found');
+                } catch (successError) {
+                    // Opcja 3: Sprawdź czy przycisk się zmienił lub zniknął
+                    const buttonStillExists = await this.page.$('button[data-testid="upload-form-save-draft-button"]');
+                    if (!buttonStillExists) {
+                        console.log('✅ Draft button disappeared - likely saved');
+                    } else {
+                        console.log('⚠️  No clear success indication, but continuing...');
+                    }
+                }
+                
                 // Poczekaj trochę na zapisanie
                 await new Promise(resolve => setTimeout(resolve, 5000));
             }
@@ -2190,8 +2536,9 @@ export class VintedAutomation {
     async startWithExistingBrowser() {
         try {
             console.log('🚀 Starting Vinted automation with existing browser...');
+            console.log('🔍 Sprawdzanie połączenia z Chrome...');
             
-            // Połącz z istniejącą przeglądarką
+            // Połącz z istniejącą przeglądarką (lub uruchom automatycznie)
             await this.initWithExistingBrowser();
             
             // Dodatkowa ochrona przed dialogami
@@ -2283,9 +2630,15 @@ export class VintedAutomation {
             console.log('✅ Automation completed successfully.');
             
         } catch (error) {
-            console.error('❌ Error in Vinted automation:', error);
-            
             const errorMessage = error instanceof Error ? error.message : String(error);
+            
+            // Specjalna obsługa dla przypadku uruchomienia Chrome
+            if (errorMessage === 'CHROME_STARTED_PLEASE_LOGIN') {
+                console.log('🎯 Chrome został uruchomiony. Program kończy działanie.');
+                return; // Zakończ bez błędu
+            }
+            
+            console.error('❌ Error in Vinted automation:', error);
             
             if (errorMessage.includes('TimeoutError') || errorMessage.includes('Waiting for selector')) {
                 console.log('\n💡 Rozwiązania problemów:');
@@ -2359,7 +2712,12 @@ export async function runVintedAutomationWithExistingBrowser() {
     try {
         await automation.startWithExistingBrowser();
     } catch (error) {
-        console.error('Vinted automation with existing browser failed:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Nie pokazuj błędu jeśli Chrome został właśnie uruchomiony
+        if (errorMessage !== 'CHROME_STARTED_PLEASE_LOGIN') {
+            console.error('Vinted automation with existing browser failed:', error);
+        }
     }
     // Nie zamykamy przeglądarki bo używamy istniejącej
 }
