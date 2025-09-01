@@ -22,16 +22,6 @@ function parseData(data) {
 }
 
 // src/main.ts
-async function apiCall(endpoint, method = "GET", data) {
-  const response = await fetch(`http://localhost:3002${endpoint}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: data ? JSON.stringify(data) : undefined
-  });
-  return await response.json();
-}
 function createItemCard(item, index) {
   const card = document.createElement("div");
   card.className = "item-card";
@@ -50,90 +40,10 @@ function createItemCard(item, index) {
   card.appendChild(detailsElement);
   return card;
 }
-function createControlPanel() {
-  const panel = document.createElement("div");
-  panel.className = "control-panel";
-  const title = document.createElement("h2");
-  title.textContent = "Automatyzacja Vinted";
-  panel.appendChild(title);
-  const puppeteerButton = document.createElement("button");
-  puppeteerButton.textContent = "Uruchom Puppeteer - Logowanie Vinted";
-  puppeteerButton.addEventListener("click", handlePuppeteerLogin);
-  panel.appendChild(puppeteerButton);
-  const addItemsButton = document.createElement("button");
-  addItemsButton.textContent = "Dodaj wszystkie ogłoszenia";
-  addItemsButton.disabled = true;
-  addItemsButton.id = "addItemsButton";
-  addItemsButton.addEventListener("click", handleAddItems);
-  panel.appendChild(addItemsButton);
-  const statusDiv = document.createElement("div");
-  statusDiv.id = "puppeteerStatus";
-  statusDiv.textContent = "Status: Nie uruchomiono";
-  panel.appendChild(statusDiv);
-  return panel;
-}
-async function handlePuppeteerLogin() {
-  const statusDiv = document.getElementById("puppeteerStatus");
-  const addButton = document.getElementById("addItemsButton");
-  try {
-    if (statusDiv)
-      statusDiv.textContent = "Status: Inicjalizacja Puppeteer...";
-    const initResult = await apiCall("/api/puppeteer/init", "POST");
-    if (!initResult.success) {
-      throw new Error(initResult.error);
-    }
-    if (statusDiv)
-      statusDiv.textContent = "Status: Przekierowywanie na stronę logowania...";
-    const loginResult = await apiCall("/api/puppeteer/login", "POST");
-    if (!loginResult.success) {
-      throw new Error(loginResult.error);
-    }
-    if (statusDiv)
-      statusDiv.textContent = "Status: Zalogowano pomyślnie! Można dodawać ogłoszenia.";
-    if (addButton)
-      addButton.disabled = false;
-  } catch (error) {
-    console.error("Błąd podczas logowania:", error);
-    if (statusDiv)
-      statusDiv.textContent = `Status: Błąd - ${error}`;
-  }
-}
-async function handleAddItems() {
-  const statusDiv = document.getElementById("puppeteerStatus");
-  const addButton = document.getElementById("addItemsButton");
-  try {
-    addButton.disabled = true;
-    if (statusDiv)
-      statusDiv.textContent = "Status: Pobieranie danych przedmiotów...";
-    const testData = `
-        roca wear jersey dlugi rekaw granatowy size L bez wad
-        d 77 s 60
-        ecko unltd jortsy size 38 granatowe bez wad
-        p 48 d 60 u 40 n 32
-        `;
-    const items = parseData(testData);
-    if (statusDiv)
-      statusDiv.textContent = `Status: Dodawanie ${items.length} przedmiotów...`;
-    const result = await apiCall("/api/puppeteer/add-items", "POST", { items });
-    if (!result.success) {
-      throw new Error(result.error);
-    }
-    if (statusDiv)
-      statusDiv.textContent = "Status: Wszystkie przedmioty zostały dodane!";
-  } catch (error) {
-    console.error("Błąd podczas dodawania przedmiotów:", error);
-    if (statusDiv)
-      statusDiv.textContent = `Status: Błąd - ${error}`;
-  } finally {
-    addButton.disabled = false;
-  }
-}
 function init() {
   const container = document.getElementById("itemsContainer");
   if (!container)
     return;
-  const controlPanel = createControlPanel();
-  container.appendChild(controlPanel);
   const testData = `
     roca wear jersey dlugi rekaw granatowy size L bez wad
     d 77 s 60

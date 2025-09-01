@@ -97,19 +97,57 @@ export function formatItem(item) {
     const details = item.details;
     const isAccessory = item.isAccessory;
 
+    // Funkcja mapowania rozmiarów spodni na format Vinted
+    function mapPantsSize(rawSize, itemTitle) {
+        const isPants = /\b(spodnie|jeansy|jortsy|spodenki|dresy)\b/i.test(itemTitle);
+        
+        if (isPants && /^\d+$/.test(rawSize)) {
+            const numericSize = parseInt(rawSize);
+            
+            // Mapowanie rozmiarów spodni według standardowych konwersji
+            const sizeMap = {
+                28: "38 | W23",
+                29: "40 | W24", 
+                30: "40 | W25",
+                31: "42 | W26",
+                32: "44 | W27",
+                33: "44 | W28",
+                34: "46 | W29",
+                35: "46 | W30",
+                36: "48 | W31",
+                37: "48 | W32",
+                38: "50 | W33",
+                39: "50 | W34",
+                40: "50 | W35",
+                41: "52 | W36",
+                42: "54 | W38",
+                44: "56 | W40",
+                46: "58 | W42",
+                48: "60 | W44",
+                50: "62 | W46"
+            };
+            
+            return sizeMap[numericSize] || rawSize;
+        }
+        
+        return rawSize;
+    }
+
     // Extract size from title
     let size = '';
     
     // Sprawdź najpierw "size" z numerem/literą
     const sizeWithWordMatch = rawTitle.match(/size\s+([^\s]+)/i);
     if (sizeWithWordMatch) {
-        size = sizeWithWordMatch[1].toUpperCase();
+        const rawSize = sizeWithWordMatch[1].toUpperCase();
+        size = mapPantsSize(rawSize, rawTitle);
     } else {
         // Sprawdź samodzielne oznaczenia rozmiaru
         const sizeRegex = /\b(XS|S|M|L|XL|XXL|XXXL|[2-5]?XL|(?:2[0-9]|3[0-9]|4[0-9]|50))\b/i;
         const standaloneSizeMatch = rawTitle.match(sizeRegex);
         if (standaloneSizeMatch) {
-            size = standaloneSizeMatch[1].toUpperCase();
+            const rawSize = standaloneSizeMatch[1].toUpperCase();
+            size = mapPantsSize(rawSize, rawTitle);
         }
     }
 

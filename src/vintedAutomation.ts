@@ -1438,11 +1438,11 @@ export class VintedAutomation {
                 mainCategory: 'Ubrania',
                 mainCategoryId: '2050',
                 subCategory: 'Okrycia wierzchnie',
-                subCategoryId: '2051',
+                subCategoryId: '1206',
                 intermediateCategory: 'Kurtki',
                 intermediateCategoryId: '2052',
                 finalCategory: 'Kurtki ocieplane',
-                finalCategoryId: '2053'
+                finalCategoryId: '2536'
             },
             'Koszule w kratkę': {
                 mainCategory: 'Ubrania',
@@ -1516,17 +1516,25 @@ export class VintedAutomation {
                 mainCategory: 'Ubrania',
                 mainCategoryId: '2050',
                 subCategory: 'Swetry i bluzy',
-                subCategoryId: '2054',
+                subCategoryId: '79',  // Poprawione ID dla "Swetry i bluzy"
                 finalCategory: 'Swetry i bluzy z kapturem',
-                finalCategoryId: '2056'
+                finalCategoryId: '267'  // Poprawione ID dla "Swetry i bluzy z kapturem"
             },
             'Bluzy rozpinane': {
                 mainCategory: 'Ubrania',
                 mainCategoryId: '2050',
                 subCategory: 'Swetry i bluzy',
-                subCategoryId: '2054',
-                finalCategory: 'Bluzy rozpinane',
-                finalCategoryId: '2057'
+                subCategoryId: '79',  // Poprawione ID dla "Swetry i bluzy"
+                finalCategory: 'Kardigany',  // Używamy kategorii Kardigany jako najbliższej dla bluz rozpinanych
+                finalCategoryId: '266'  // Poprawione ID dla kategorii Kardigany
+            },
+            'Kardigany': {
+                mainCategory: 'Ubrania',
+                mainCategoryId: '2050',
+                subCategory: 'Swetry i bluzy',
+                subCategoryId: '79',
+                finalCategory: 'Kardigany',
+                finalCategoryId: '266'
             },
             'Spodnie z szerokimi nogawkami': {
                 mainCategory: 'Ubrania',
@@ -1546,135 +1554,135 @@ export class VintedAutomation {
             },
             'Sneakersy, trampki i tenisówki': {
                 mainCategory: 'Obuwie',
-                mainCategoryId: '2071',
+                mainCategoryId: '1231',  // Poprawione ID dla "Obuwie"
                 finalCategory: 'Sneakersy, trampki i tenisówki',
-                finalCategoryId: '2080'
+                finalCategoryId: '1242'  // Poprawione ID dla "Sneakersy, trampki i tenisówki"
             },
             'Chusty i chustki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 finalCategory: 'Chusty i chustki',
-                finalCategoryId: '2082'
+                finalCategoryId: '2960'  // Poprawione ID dla "Chusty i chustki"
             },
             'Paski': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 finalCategory: 'Paski',
-                finalCategoryId: '2083'
+                finalCategoryId: '96'  // Poprawione ID dla "Paski"
             },
             'Rękawiczki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 finalCategory: 'Rękawiczki',
                 finalCategoryId: '2085'
             },
             'Poszetki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 finalCategory: 'Poszetki',
-                finalCategoryId: '2091'
+                finalCategoryId: '2957'
             },
             'Szaliki i szale': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 finalCategory: 'Szaliki i szale',
                 finalCategoryId: '2092'
             },
             'Okulary przeciwsłoneczne': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',  // Poprawione ID dla "Akcesoria, dodatki"
                 finalCategory: 'Okulary przeciwsłoneczne',
-                finalCategoryId: '2093'
+                finalCategoryId: '98'  // Poprawione ID dla "Okulary przeciwsłoneczne"
             },
             'Krawaty i muszki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 finalCategory: 'Krawaty i muszki',
-                finalCategoryId: '2094'
+                finalCategoryId: '2956'
             },
             'Zegarki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 finalCategory: 'Zegarki',
                 finalCategoryId: '2095'
             },
             'Plecaki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',  // Poprawione ID dla "Torby"
                 finalCategory: 'Plecaki',
-                finalCategoryId: '2097'
+                finalCategoryId: '246'  // Poprawione ID dla "Plecaki"
             },
             'Teczki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Teczki',
                 finalCategoryId: '2098'
             },
             'Nerki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Nerki',
                 finalCategoryId: '2099'
             },
             'Pokrowce na ubrania': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Pokrowce na ubrania',
                 finalCategoryId: '2100'
             },
             'Torby na siłownię': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Torby na siłownię',
                 finalCategoryId: '2101'
             },
             'Torby podróżne': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Torby podróżne',
                 finalCategoryId: '2102'
             },
             'Walizki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Walizki',
                 finalCategoryId: '2103'
             },
             'Listonoszki': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Listonoszki',
                 finalCategoryId: '2104'
             },
             'Torby na ramię': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Torby na ramię',
                 finalCategoryId: '2105'
             },
             'Portfele': {
                 mainCategory: 'Akcesoria, dodatki',
-                mainCategoryId: '2081',
+                mainCategoryId: '82',
                 subCategory: 'Torby',
-                subCategoryId: '2096',
+                subCategoryId: '94',
                 finalCategory: 'Portfele',
                 finalCategoryId: '2106'
             }
@@ -1702,6 +1710,58 @@ export class VintedAutomation {
             } else if (type.includes('dżins')) {
                 return categoryMappings['Koszule dżinsowe'];
             }
+        }
+        
+        // Fallback dla kurtek
+        if (type.includes('kurtk') || type.includes('jacket') || type.includes('płaszcz') || type.includes('coat') || type.includes('bomber')) {
+            return categoryMappings['kurtka'];
+        }
+
+        // Fallback dla bluz
+        if (type.includes('bluza') || type.includes('hoodie') || type.includes('sweter') || type.includes('kardigan')) {
+            if (type.includes('kaptur') || type.includes('hood')) {
+                return categoryMappings['Swetry i bluzy z kapturem'];
+            } else if (type.includes('rozpina') || type.includes('zip') || type.includes('kardigan')) {
+                return categoryMappings['Kardigany'];  // Używamy Kardigany zamiast "Bluzy rozpinane"
+            } else {
+                // Domyślnie bluzy z kapturem
+                return categoryMappings['Swetry i bluzy z kapturem'];
+            }
+        }
+
+        // Fallback dla akcesoriów
+        if (type.includes('okular') || type.includes('sunglasses')) {
+            return categoryMappings['Okulary przeciwsłoneczne'];
+        }
+
+        // Fallback dla toreb i plecaków
+        if (type.includes('plecak') || type.includes('backpack')) {
+            return categoryMappings['Plecaki'];
+        }
+
+        // Fallback dla obuwia
+        if (type.includes('buty') || type.includes('sneakers') || type.includes('trampki') || type.includes('tenisówki') || type.includes('shoes')) {
+            return categoryMappings['Sneakersy, trampki i tenisówki'];
+        }
+
+        // Fallback dla chust i chustek
+        if (type.includes('chusta') || type.includes('chustka') || type.includes('szal') || type.includes('scarf')) {
+            return categoryMappings['Chusty i chustki'];
+        }
+
+        // Fallback dla pasków
+        if (type.includes('pasek') || type.includes('belt')) {
+            return categoryMappings['Paski'];
+        }
+
+        // Fallback dla krawatów i muszek
+        if (type.includes('krawat') || type.includes('muszk') || type.includes('tie') || type.includes('bow tie')) {
+            return categoryMappings['Krawaty i muszki'];
+        }
+
+        // Fallback dla poszetki
+        if (type.includes('poszetk') || type.includes('pocket square')) {
+            return categoryMappings['Poszetki'];
         }
 
         // Domyślna kategoria
@@ -1825,6 +1885,9 @@ export class VintedAutomation {
             // Wybierz pierwszy wynik
             await this.selectBrandFromList(advertisement.marka || '');
             
+            // Dodatkowo sprawdź czy nie pojawił się modal autentyczności
+            await this.closeAuthenticityModalIfPresent();
+            
         } catch (error) {
             console.error('❌ Error selecting brand:', error);
             console.log('💡 Możesz wybrać markę ręcznie w przeglądarce');
@@ -1883,12 +1946,42 @@ export class VintedAutomation {
                 // Poczekaj chwilę i kliknij przycisk zapisz
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
+                // Sprawdź czy pojawił się modal autentyczności i zamknij go
+                await this.closeAuthenticityModalIfPresent();
+                
                 // Poczekaj na zamknięcie dropdown
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
         } catch (error) {
             console.error('❌ Error selecting brand from list:', error);
+        }
+    }
+
+    async closeAuthenticityModalIfPresent() {
+        if (!this.page) return;
+        
+        try {
+            console.log('🔍 Checking for authenticity modal...');
+            
+            // Sprawdź czy modal autentyczności jest widoczny
+            const modalSelector = 'button[data-testid="authenticity-modal--close-button"]';
+            const modal = await this.page.$(modalSelector);
+            
+            if (modal) {
+                console.log('📋 Authenticity modal detected, closing...');
+                await this.page.click(modalSelector);
+                console.log('✅ Authenticity modal closed');
+                
+                // Poczekaj na zamknięcie modala
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            } else {
+                console.log('ℹ️ No authenticity modal found');
+            }
+            
+        } catch (error) {
+            console.log('⚠️ Error checking/closing authenticity modal:', error);
+            // Nie rzucamy błędu, bo to nie jest krytyczne
         }
     }
 
@@ -1914,6 +2007,14 @@ export class VintedAutomation {
                 console.log('⚠️  No size specified, skipping size selection');
                 return;
             }
+            
+            // Funkcja do normalizacji rozmiarów (dodaje spacje wokół | dla zgodności z Vinted)
+            const normalizeSize = (size: string): string => {
+                return size.replace(/\s*\|\s*/g, ' | ').trim();
+            };
+            
+            const normalizedTargetSize = normalizeSize(targetSize);
+            console.log(`🎯 Normalized target size: "${normalizedTargetSize}"`);
             
             // Spróbuj znaleźć rozmiar na różne sposoby
             let sizeSelected = false;
@@ -1944,11 +2045,14 @@ export class VintedAutomation {
                     
                     for (const element of sizeElements) {
                         const sizeText = await element.$eval('.web_ui__Cell__title', el => el.textContent?.trim() || '');
-                        console.log(`📋 Checking size: "${sizeText}"`);
+                        const normalizedSizeText = normalizeSize(sizeText);
+                        console.log(`📋 Checking size: "${sizeText}" (normalized: "${normalizedSizeText}")`);
                         
-                        if (sizeText === targetSize) {
+                        // Porównaj zarówno oryginalny jak i znormalizowany tekst
+                        if (sizeText === targetSize || normalizedSizeText === normalizedTargetSize || 
+                            sizeText === normalizedTargetSize || normalizedSizeText === targetSize) {
                             await element.click();
-                            console.log(`✅ Selected size: ${targetSize}`);
+                            console.log(`✅ Selected size: ${sizeText} (matched with: ${targetSize})`);
                             sizeSelected = true;
                             break;
                         }
@@ -1970,10 +2074,13 @@ export class VintedAutomation {
                         if (labelId) {
                             const labelText = await this.page.$eval(`#${labelId} .web_ui__Cell__title`, 
                                 el => el.textContent?.trim() || '');
+                            const normalizedLabelText = normalizeSize(labelText);
                             
-                            if (labelText === targetSize) {
+                            // Porównaj zarówno oryginalny jak i znormalizowany tekst
+                            if (labelText === targetSize || normalizedLabelText === normalizedTargetSize || 
+                                labelText === normalizedTargetSize || normalizedLabelText === targetSize) {
                                 await radio.click();
-                                console.log(`✅ Selected size via radio button: ${targetSize}`);
+                                console.log(`✅ Selected size via radio button: ${labelText} (matched with: ${targetSize})`);
                                 sizeSelected = true;
                                 break;
                             }
@@ -1986,6 +2093,7 @@ export class VintedAutomation {
             
             if (!sizeSelected) {
                 console.log(`⚠️  Could not find size "${targetSize}" in the list`);
+                console.log(`🔄 Also tried normalized version: "${normalizedTargetSize}"`);
                 console.log('💡 Available sizes can be selected manually');
             } else {
                 // Poczekaj na zamknięcie dropdown
