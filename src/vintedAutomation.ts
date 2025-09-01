@@ -851,7 +851,23 @@ export class VintedAutomation {
         console.log('🔄 Navigating to new listing page...');
         
         try {
+            // Najpierw sprawdź czy już jesteśmy na właściwej stronie
+            const currentUrl = this.page.url();
+            console.log(`📍 Current URL: ${currentUrl}`);
+            
+            if (currentUrl.includes('/items/new')) {
+                console.log('💡 Already on new listing page, checking form...');
+                
+                // Sprawdź czy formularz jest już dostępny
+                const photoSectionExists = await this.page.$('[data-testid="item-upload-photo-section"]');
+                if (photoSectionExists) {
+                    console.log('✅ Form already ready, no navigation needed');
+                    return;
+                }
+            }
+            
             // Przejdź bezpośrednio na stronę dodawania ogłoszenia
+            console.log('🌐 Navigating to fresh listing page...');
             await this.page.goto('https://www.vinted.pl/items/new', { 
                 waitUntil: 'networkidle2',
                 timeout: 30000 
@@ -859,9 +875,30 @@ export class VintedAutomation {
             
             console.log('✅ New listing page loaded');
             
-            // Sprawdź czy formularz się załadował
-            await this.page.waitForSelector('[data-testid="item-upload-photo-section"]', { timeout: 10000 });
-            console.log('✅ New listing form ready');
+            // Daj stronie więcej czasu na pełne załadowanie
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Sprawdź czy formularz się załadował z retry logic
+            let retries = 3;
+            while (retries > 0) {
+                try {
+                    await this.page.waitForSelector('[data-testid="item-upload-photo-section"]', { timeout: 8000 });
+                    console.log('✅ New listing form ready');
+                    return;
+                } catch (error) {
+                    retries--;
+                    console.log(`⚠️  Photo section not found, retries left: ${retries}`);
+                    
+                    if (retries > 0) {
+                        // Odśwież stronę i spróbuj ponownie
+                        console.log('🔄 Refreshing page and trying again...');
+                        await this.page.reload({ waitUntil: 'networkidle2', timeout: 20000 });
+                        await new Promise(resolve => setTimeout(resolve, 3000));
+                    } else {
+                        throw error;
+                    }
+                }
+            }
             
         } catch (error) {
             console.error('❌ Error navigating to new listing:', error);
@@ -922,11 +959,34 @@ export class VintedAutomation {
                         // Jeśli mamy więcej ogłoszeń, przygotuj się do następnego
                         if (i < advertisements.length - 1) {
                             console.log('🔄 Preparing for next advertisement after error...');
-                            try {
-                                await this.navigateToNewListing();
-                                await new Promise(resolve => setTimeout(resolve, 3000));
-                            } catch (navError) {
-                                console.error('❌ Error navigating to new listing after error:', navError);
+                            
+                            // Daj stronie więcej czasu na zresetowanie się po błędzie
+                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            
+                            let navigationSuccess = false;
+                            let navAttempts = 0;
+                            const maxNavAttempts = 3;
+                            
+                            while (!navigationSuccess && navAttempts < maxNavAttempts) {
+                                navAttempts++;
+                                console.log(`🎯 Navigation attempt ${navAttempts}/${maxNavAttempts}...`);
+                                
+                                try {
+                                    await this.navigateToNewListing();
+                                    await new Promise(resolve => setTimeout(resolve, 3000));
+                                    navigationSuccess = true;
+                                    console.log('✅ Navigation successful after error');
+                                } catch (navError) {
+                                    console.error(`❌ Navigation attempt ${navAttempts} failed:`, navError instanceof Error ? navError.message : String(navError));
+                                    
+                                    if (navAttempts < maxNavAttempts) {
+                                        console.log(`⏳ Waiting 10 seconds before next attempt...`);
+                                        await new Promise(resolve => setTimeout(resolve, 10000));
+                                    } else {
+                                        console.error('❌ All navigation attempts failed. Stopping automation.');
+                                        throw new Error('Failed to navigate to new listing after multiple attempts');
+                                    }
+                                }
                             }
                         }
                         continue;
