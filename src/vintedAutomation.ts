@@ -1,5 +1,6 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 import { fetchAdvertisements, fetchUnpublishedToVintedAdvertisements, fetchStyles, fetchDescriptionHeaders, fetchStyleByType } from './supabaseFetcher';
+import { getSizesForCategory, normalizeSizeForCategory } from './categoryToSizesMapping';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
@@ -2545,30 +2546,14 @@ export class VintedAutomation {
                 return;
             }
 
-            // Mapowanie rozmiarów specyficznych dla kategorii
-            const mapSizeForCategory = (size: string, category: string): string[] => {
-                const categoryLower = category.toLowerCase();
-                const sizeLower = size.toLowerCase();
-                
-                // Mapowanie dla pasków
-                if (categoryLower.includes('paski') || categoryLower.includes('pasek')) {
-                    if (sizeLower === 'uniwersalny') {
-                        return ['Regulowany', 'Uniwersalny', 'One Size', 'OS', 'Universal', 'uniwersalny'];
-                    }
-                }
-                
-                // Mapowanie dla portfeli
-                if (categoryLower.includes('portfel')) {
-                    if (sizeLower === 'uniwersalny') {
-                        return ['Uniwersalny', 'One Size', 'OS', 'Universal', 'uniwersalny'];
-                    }
-                }
-                
-                // Domyślnie zwróć oryginalny rozmiar
-                return [size];
-            };
+            // Użyj nowego mapowania rozmiarów
+            const availableSizes = getSizesForCategory(advertisement.rodzaj || '');
+            const normalizedTargetSize = normalizeSizeForCategory(targetSize, advertisement.rodzaj || '');
+            
+            console.log(`🎯 Available sizes for "${advertisement.rodzaj}":`, availableSizes);
+            console.log(`🎯 Normalized target size: "${normalizedTargetSize}"`);
 
-            // Funkcja do normalizacji rozmiarów 
+            // Funkcja do normalizacji rozmiarów (dla porównania z Vinted)
             const normalizeSize = (size: string): string => {
                 // Konwertuj kropkę na przecinek dla rozmiarów butów (np. 48.5 → 48,5)
                 let normalized = size.replace(/\./g, ',');
@@ -2577,35 +2562,31 @@ export class VintedAutomation {
                 return normalized;
             };
 
-            // Pobierz możliwe warianty rozmiaru dla kategorii
-            const categoryMappedSizes = mapSizeForCategory(targetSize, advertisement.rodzaj || '');
-            console.log(`🎯 Category-mapped sizes for "${advertisement.rodzaj}":`, categoryMappedSizes);
+            // Stwórz listę wariantów do przetestowania
+            const allSizeVariants = [
+                normalizedTargetSize,
+                targetSize,
+                normalizeSize(targetSize),
+                normalizeSize(normalizedTargetSize),
+                targetSize.replace(/\./g, ','),
+                targetSize.replace(/,/g, '.'),
+                // Dodaj wszystkie dostępne rozmiary jako możliwe dopasowania
+                ...availableSizes.filter(size => 
+                    size.toLowerCase().includes(targetSize.toLowerCase()) ||
+                    targetSize.toLowerCase().includes(size.toLowerCase())
+                )
+            ];
 
-            const normalizedTargetSize = normalizeSize(targetSize);
-            console.log(`🎯 Normalized target size: "${normalizedTargetSize}"`);
-
-            // Alternatywne formaty do przetestowania - kombinuj mapowanie kategorii z normalizacją
-            const allSizeVariants = [];
-            
-            // Dodaj wszystkie mapowane rozmiary i ich znormalizowane wersje
-            for (const mappedSize of categoryMappedSizes) {
-                allSizeVariants.push(
-                    mappedSize,                           // oryginalny mapowany rozmiar
-                    normalizeSize(mappedSize),            // znormalizowana wersja
-                    mappedSize.replace(/\./g, ','),       // zamiana kropki na przecinek
-                    mappedSize.replace(/,/g, '.')         // zamiana przecinka na kropkę
-                );
-            }
-            
             // Usuń duplikaty
-            const sizeVariants = [...new Set(allSizeVariants)];
+            const uniqueSizeVariants = [...new Set(allSizeVariants)];
+            console.log(`🔍 Will try size variants:`, uniqueSizeVariants);
             
-            console.log(`🔍 Will try size variants:`, sizeVariants);            // Spróbuj znaleźć rozmiar na różne sposoby
+            // Spróbuj znaleźć rozmiar na różne sposoby
             let sizeSelected = false;
             
             // 1. Spróbuj znaleźć po dokładnym tekście (wszystkie warianty)
             try {
-                for (const variant of sizeVariants) {
+                for (const variant of uniqueSizeVariants) {
                     const exactMatch = await this.page.waitForSelector(
                         `div[data-testid*="size-"] .web_ui__Cell__title:text("${variant}")`, 
                         { timeout: 1000 }
@@ -2636,7 +2617,7 @@ export class VintedAutomation {
                         console.log(`📋 Checking size: "${sizeText}"`);
                         
                         // Porównaj z wszystkimi wariantami rozmiaru
-                        const sizeMatch = sizeVariants.some(variant => 
+                        const sizeMatch = uniqueSizeVariants.some((variant: string) => 
                             sizeText === variant || 
                             sizeText.replace(/\./g, ',') === variant ||
                             sizeText.replace(/,/g, '.') === variant
@@ -2666,7 +2647,7 @@ export class VintedAutomation {
                             console.log(`📋 Checking size (method 2): "${sizeText}"`);
                             
                             // Porównaj z wszystkimi wariantami rozmiaru
-                            const sizeMatch = sizeVariants.some(variant => 
+                            const sizeMatch = uniqueSizeVariants.some((variant: string) => 
                                 sizeText === variant || 
                                 sizeText.replace(/\./g, ',') === variant ||
                                 sizeText.replace(/,/g, '.') === variant
@@ -2691,7 +2672,7 @@ export class VintedAutomation {
             if (!sizeSelected) {
                 try {
                     console.log('🔍 Trying method 3: search by text content...');
-                    for (const variant of sizeVariants) {
+                    for (const variant of uniqueSizeVariants) {
                         const found = await this.page.evaluate((targetSize) => {
                             const elements = Array.from(document.querySelectorAll('*'));
                             for (const element of elements) {
@@ -2733,13 +2714,11 @@ export class VintedAutomation {
                                 console.log(`📋 Checking radio size: "${labelText}"`);
                                 
                                 // Porównaj z wszystkimi wariantami rozmiaru
-                                const labelMatch = sizeVariants.some(variant => 
-                                    labelText === variant || 
+                                const labelMatch = uniqueSizeVariants.some((variant: string) => 
+                                    labelText === variant ||
                                     labelText.replace(/\./g, ',') === variant ||
                                     labelText.replace(/,/g, '.') === variant
-                                );
-                                
-                                if (labelMatch) {
+                                );                                if (labelMatch) {
                                     await radio.click();
                                     console.log(`✅ Selected size via radio button: ${labelText} (matched with target: ${targetSize})`);
                                     sizeSelected = true;
@@ -2755,7 +2734,7 @@ export class VintedAutomation {
 
             if (!sizeSelected) {
                 console.log(`⚠️  Could not find size "${targetSize}" in the list`);
-                console.log(`🔄 Also tried variants:`, sizeVariants);
+                console.log(`🔄 Also tried variants:`, uniqueSizeVariants);
                 
                 // Debug: pokaż wszystkie dostępne rozmiary
                 try {
