@@ -7,6 +7,18 @@ const server = serve({
         const url = new URL(req.url);
         console.log(`Otrzymano żądanie: ${url.pathname}`);
         
+        // Handle CORS preflight requests
+        if (req.method === "OPTIONS") {
+            return new Response(null, {
+                status: 200,
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+                }
+            });
+        }
+        
         try {
             // Ignoruj żądania devtools
             if (url.pathname.includes('.well-known/appspecific/com.chrome.devtools')) {
@@ -55,6 +67,132 @@ const server = serve({
                         "Access-Control-Allow-Origin": "*"
                     }
                 });
+            }
+
+            // Endpoint dla automatyzacji Vinted
+            if (url.pathname === "/api/vinted/automate" && req.method === "POST") {
+                try {
+                    console.log('🚀 Starting Vinted automation from web interface...');
+                    
+                    // Import dynamically to avoid issues
+                    const { runVintedAutomationWithExistingBrowser } = await import('./vintedAutomation');
+                    
+                    // Run automation in background
+                    runVintedAutomationWithExistingBrowser()
+                        .then(() => {
+                            console.log('✅ Vinted automation completed successfully');
+                        })
+                        .catch((error) => {
+                            console.error('❌ Vinted automation failed:', error);
+                        });
+                    
+                    return new Response(JSON.stringify({ 
+                        success: true, 
+                        message: "Vinted automation started. Check console for progress." 
+                    }), {
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                } catch (error) {
+                    return new Response(JSON.stringify({ 
+                        success: false, 
+                        message: "Failed to start automation: " + error 
+                    }), {
+                        status: 500,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+            }
+
+            // Endpoint do uruchomienia przeglądarki do logowania
+            if (url.pathname === "/api/chrome/launch" && req.method === "POST") {
+                try {
+                    console.log('🚀 Uruchamiam Chrome do logowania...');
+                    
+                    const { VintedAutomation } = await import('./vintedAutomation');
+                    const automation = new VintedAutomation();
+                    
+                    // Uruchom tylko Chrome bez automatyzacji
+                    const chromeStarted = await automation.startChromeWithDebugPort();
+                    
+                    if (chromeStarted) {
+                        return new Response(JSON.stringify({ 
+                            success: true, 
+                            message: "Chrome uruchomiony! Zaloguj się na Vinted, a następnie kliknij 'Podłącz automatyzację'." 
+                        }), {
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Origin": "*"
+                            }
+                        });
+                    } else {
+                        return new Response(JSON.stringify({ 
+                            success: false, 
+                            message: "Nie udało się uruchomić Chrome" 
+                        }), {
+                            status: 500,
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Origin": "*"
+                            }
+                        });
+                    }
+                } catch (error) {
+                    return new Response(JSON.stringify({ 
+                        success: false, 
+                        message: "Błąd uruchamiania Chrome: " + error 
+                    }), {
+                        status: 500,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+            }
+
+            // Endpoint do podłączenia automatyzacji do istniejącej przeglądarki
+            if (url.pathname === "/api/vinted/connect" && req.method === "POST") {
+                try {
+                    console.log('🔗 Podłączam automatyzację do Chrome...');
+                    
+                    const { runVintedAutomationWithExistingBrowser } = await import('./vintedAutomation');
+                    
+                    // Run automation in background
+                    runVintedAutomationWithExistingBrowser()
+                        .then(() => {
+                            console.log('✅ Vinted automation completed successfully');
+                        })
+                        .catch((error) => {
+                            console.error('❌ Vinted automation failed:', error);
+                        });
+                    
+                    return new Response(JSON.stringify({ 
+                        success: true, 
+                        message: "Automatyzacja podłączona! Sprawdź konsolę dla szczegółów." 
+                    }), {
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                } catch (error) {
+                    return new Response(JSON.stringify({ 
+                        success: false, 
+                        message: "Błąd podłączenia automatyzacji: " + error 
+                    }), {
+                        status: 500,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
             }
 
             // Endpoint dla stylów z Supabase

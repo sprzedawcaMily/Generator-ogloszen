@@ -7,6 +7,19 @@ function updateDebug(message) {
     console.log(message);
 }
 
+// Show message function
+function showMessage(text) {
+    const messageBox = document.getElementById('messageBox');
+    if (messageBox) {
+        messageBox.textContent = text;
+        messageBox.style.cssText = 'position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #059669; color: white; padding: 12px 24px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; opacity: 1; visibility: visible;';
+        setTimeout(() => {
+            messageBox.style.opacity = '0';
+            messageBox.style.visibility = 'hidden';
+        }, 5000);
+    }
+}
+
 // Function to get shortened version of product type
 function getShortenedProductType(rodzaj) {
     if (!rodzaj) return '';
@@ -246,6 +259,33 @@ async function createAdvertisementCard(ad, index, styles) {
     return card;
 }
 
+// Function to run Vinted automation
+async function runVintedAutomation() {
+    try {
+        updateDebug('🚀 Uruchamianie automatyzacji Vinted...');
+        
+        const response = await fetch('/api/vinted/automate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            updateDebug('✅ Automatyzacja Vinted uruchomiona pomyślnie!');
+            showMessage('Automatyzacja Vinted uruchomiona! Sprawdź konsolę serwera dla postępu.');
+        } else {
+            updateDebug(`❌ Błąd automatyzacji: ${result.message}`);
+            showMessage(`Błąd: ${result.message}`);
+        }
+    } catch (error) {
+        updateDebug(`❌ Błąd podczas uruchamiania automatyzacji: ${error.message}`);
+        showMessage(`Błąd: ${error.message}`);
+    }
+}
+
 // Generate formatted description for advertisement
 async function generateAdvertisementDescription(ad, styles, descriptionHeaders) {
     let description = '';
@@ -467,6 +507,43 @@ async function init() {
             return;
         }
         
+        // Add Vinted automation buttons
+        const automationContainer = document.createElement('div');
+        automationContainer.className = 'automation-container';
+        automationContainer.style.cssText = 'margin: 20px 0; text-align: center; padding: 20px; background: #f0f9ff; border-radius: 12px; border: 2px solid #0ea5e9;';
+        
+        const automationTitle = document.createElement('h3');
+        automationTitle.textContent = '🤖 Automatyzacja Vinted';
+        automationTitle.style.cssText = 'margin: 0 0 10px 0; color: #0369a1;';
+        
+        const automationDescription = document.createElement('p');
+        automationDescription.textContent = 'Krok 1: Uruchom przeglądarkę i zaloguj się do Google/Vinted. Krok 2: Podłącz automatyzację do publikacji ogłoszeń.';
+        automationDescription.style.cssText = 'margin: 0 0 15px 0; color: #64748b; font-size: 14px;';
+        
+        const buttonRow = document.createElement('div');
+        buttonRow.style.cssText = 'display: flex; gap: 12px; justify-content: center; align-items: center;';
+        
+        // Launch Chrome button
+        const launchChromeButton = document.createElement('button');
+        launchChromeButton.textContent = '🚀 Uruchom przeglądarkę';
+        launchChromeButton.className = 'automation-btn launch-chrome-btn';
+        launchChromeButton.style.cssText = 'background: #3b82f6; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
+        launchChromeButton.onclick = () => launchChromeForLogin();
+        buttonRow.appendChild(launchChromeButton);
+        
+        // Connect automation button
+        const connectAutomationButton = document.createElement('button');
+        connectAutomationButton.textContent = '� Podłącz automatyzację';
+        connectAutomationButton.className = 'automation-btn connect-automation-btn';
+        connectAutomationButton.style.cssText = 'background: #059669; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
+        connectAutomationButton.onclick = () => connectVintedAutomation();
+        buttonRow.appendChild(connectAutomationButton);
+        
+        automationContainer.appendChild(automationTitle);
+        automationContainer.appendChild(automationDescription);
+        automationContainer.appendChild(buttonRow);
+        container.appendChild(automationContainer);
+        
         // Create and append advertisement cards
         for (let i = 0; i < data.advertisements.length; i++) {
             const ad = data.advertisements[i];
@@ -479,6 +556,56 @@ async function init() {
     } catch (error) {
         updateDebug(`Błąd podczas inicjalizacji: ${error.message}`);
         container.innerHTML = '<div class="error">Wystąpił błąd podczas ładowania danych</div>';
+    }
+}
+
+// Function to launch Chrome for login
+async function launchChromeForLogin() {
+    try {
+        showMessage('🚀 Uruchamiam Chrome...');
+        
+        const response = await fetch('/api/chrome/launch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showMessage('✅ ' + result.message);
+        } else {
+            showMessage('❌ ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error launching Chrome:', error);
+        showMessage('❌ Błąd uruchamiania Chrome: ' + error.message);
+    }
+}
+
+// Function to connect Vinted automation
+async function connectVintedAutomation() {
+    try {
+        showMessage('🔗 Podłączam automatyzację...');
+        
+        const response = await fetch('/api/vinted/connect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showMessage('✅ ' + result.message);
+        } else {
+            showMessage('❌ ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error connecting automation:', error);
+        showMessage('❌ Błąd podłączenia automatyzacji: ' + error.message);
     }
 }
 
