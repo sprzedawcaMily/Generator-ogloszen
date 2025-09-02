@@ -195,6 +195,65 @@ const server = serve({
                 }
             }
 
+            // Endpoint do przełączania statusu publikacji na Vinted
+            if (url.pathname === "/api/vinted/toggle-status" && req.method === "POST") {
+                try {
+                    const body = await req.json();
+                    const { advertisementId } = body;
+                    
+                    if (!advertisementId) {
+                        return new Response(JSON.stringify({ 
+                            success: false, 
+                            message: "Brak ID ogłoszenia" 
+                        }), {
+                            status: 400,
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Origin": "*"
+                            }
+                        });
+                    }
+
+                    const { toggleVintedPublishStatus } = await import('./supabaseFetcher');
+                    const result = await toggleVintedPublishStatus(advertisementId);
+                    
+                    if (result.success) {
+                        return new Response(JSON.stringify({ 
+                            success: true, 
+                            is_published_to_vinted: result.is_published_to_vinted,
+                            message: `Status zmieniony na: ${result.is_published_to_vinted ? 'opublikowane' : 'nieopublikowane'}` 
+                        }), {
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Origin": "*"
+                            }
+                        });
+                    } else {
+                        return new Response(JSON.stringify({ 
+                            success: false, 
+                            message: result.message || "Błąd zmiany statusu"
+                        }), {
+                            status: 500,
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Origin": "*"
+                            }
+                        });
+                    }
+                } catch (error) {
+                    return new Response(JSON.stringify({ 
+                        success: false, 
+                        message: "Błąd serwera: " + error 
+                    }), {
+                        status: 500,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+            }
+
             // Endpoint dla stylów z Supabase
             if (url.pathname === "/api/styles") {
                 const data = await fetchStyles();

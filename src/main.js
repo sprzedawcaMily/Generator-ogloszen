@@ -133,7 +133,12 @@ async function fetchSupabaseData() {
 // Create a product card from advertisement data
 async function createAdvertisementCard(ad, index, styles) {
     const card = document.createElement('div');
-    card.className = 'item-card completed';
+    // Ustaw klasę CSS na podstawie statusu publikacji na Vinted
+    if (ad.is_published_to_vinted) {
+        card.className = 'item-card completed published-vinted';
+    } else {
+        card.className = 'item-card completed';
+    }
 
     const itemNumber = document.createElement('span');
     itemNumber.className = 'item-number';
@@ -253,6 +258,13 @@ async function createAdvertisementCard(ad, index, styles) {
     copyDescButton.className = 'copy-btn copy-desc-btn';
     copyDescButton.onclick = () => copyAdvertisementToClipboard(ad);
     buttonContainer.appendChild(copyDescButton);
+
+    // Vinted status button
+    const vintedStatusButton = document.createElement('button');
+    vintedStatusButton.className = `vinted-status-btn ${ad.is_published_to_vinted ? 'published' : ''}`;
+    vintedStatusButton.textContent = ad.is_published_to_vinted ? '✓ Opublikowane' : '⊕ Nie opublikowane';
+    vintedStatusButton.onclick = () => toggleVintedStatus(ad.id, vintedStatusButton, card);
+    buttonContainer.appendChild(vintedStatusButton);
     
     card.appendChild(buttonContainer);
 
@@ -606,6 +618,45 @@ async function connectVintedAutomation() {
     } catch (error) {
         console.error('Error connecting automation:', error);
         showMessage('❌ Błąd podłączenia automatyzacji: ' + error.message);
+    }
+}
+
+// Toggle Vinted publication status
+async function toggleVintedStatus(advertisementId, button, card) {
+    try {
+        showMessage('🔄 Aktualizuję status Vinted...');
+        
+        const response = await fetch('/api/vinted/toggle-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                advertisementId: advertisementId 
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Aktualizuj UI
+            if (result.is_published_to_vinted) {
+                button.textContent = '✓ Opublikowane';
+                button.className = 'vinted-status-btn published';
+                card.className = 'item-card completed published-vinted';
+                showMessage('✅ Oznaczono jako opublikowane na Vinted');
+            } else {
+                button.textContent = '⊕ Nie opublikowane';
+                button.className = 'vinted-status-btn';
+                card.className = 'item-card completed';
+                showMessage('✅ Oznaczono jako nieopublikowane na Vinted');
+            }
+        } else {
+            showMessage('❌ Błąd: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error toggling Vinted status:', error);
+        showMessage('❌ Błąd zmiany statusu: ' + error.message);
     }
 }
 

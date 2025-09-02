@@ -77,6 +77,10 @@ export async function fetchUnpublishedToVintedAdvertisements() {
             .from('advertisements')
             .select('*')
             .eq('is_published_to_vinted', false)
+            .not('marka', 'is', null)
+            .not('rodzaj', 'is', null)
+            .not('rozmiar', 'is', null)
+            .not('stan', 'is', null)
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -84,7 +88,26 @@ export async function fetchUnpublishedToVintedAdvertisements() {
             return [];
         }
 
-        return data || [];
+        // Additional filter for empty strings and ensure photos exist
+        const validAdvertisements = (data || []).filter(ad => {
+            const hasRequiredFields = ad.marka && ad.rodzaj && ad.rozmiar && ad.stan;
+            const hasPhotos = ad.photo_uris && ad.photo_uris.length > 0;
+            
+            if (!hasRequiredFields) {
+                console.log(`⚠️ Skipping advertisement ${ad.id}: missing required fields (marka: ${ad.marka}, rodzaj: ${ad.rodzaj}, rozmiar: ${ad.rozmiar}, stan: ${ad.stan})`);
+                return false;
+            }
+            
+            if (!hasPhotos) {
+                console.log(`⚠️ Skipping advertisement ${ad.id}: no photos available`);
+                return false;
+            }
+            
+            return true;
+        });
+
+        console.log(`✅ Found ${validAdvertisements.length} valid unpublished advertisements (filtered from ${(data || []).length} total)`);
+        return validAdvertisements;
     } catch (error) {
         console.error('Error in fetchUnpublishedToVintedAdvertisements:', error);
         return [];
@@ -113,6 +136,12 @@ export async function fetchStyles() {
 
 export async function fetchStyleByType(productType: string) {
     try {
+        // Handle null, undefined, or empty product types
+        if (!productType || productType.trim() === '') {
+            console.log('⚠️ No product type provided, using fallback style');
+            return await fetchStyles().then(styles => styles[0] || null);
+        }
+
         const { data, error } = await supabase
             .from('style_templates')
             .select('*')
@@ -121,7 +150,7 @@ export async function fetchStyleByType(productType: string) {
             .single();
 
         if (error) {
-            console.error('Error fetching style by type:', error);
+            console.log(`⚠️ No specific style found for type "${productType}", using fallback style`);
             // Fallback to first active style if no specific type found
             return await fetchStyles().then(styles => styles[0] || null);
         }
@@ -191,5 +220,43 @@ export async function updateVintedPublishStatus(advertisementId: string, isPubli
     } catch (error) {
         console.error('Error in updateVintedPublishStatus:', error);
         return false;
+    }
+}
+
+export async function toggleVintedPublishStatus(advertisementId: string) {
+    try {
+        // Najpierw pobierz aktualny status
+        const { data, error: fetchError } = await supabase
+            .from('advertisements')
+            .select('is_published_to_vinted')
+            .eq('id', advertisementId)
+            .single();
+
+        if (fetchError) {
+            console.error('Error fetching current status:', fetchError);
+            return { success: false, message: 'Błąd pobierania aktualnego statusu' };
+        }
+
+        // Przełącz status
+        const newStatus = !data.is_published_to_vinted;
+        
+        const { error: updateError } = await supabase
+            .from('advertisements')
+            .update({ is_published_to_vinted: newStatus })
+            .eq('id', advertisementId);
+
+        if (updateError) {
+            console.error('Error updating Vinted publish status:', updateError);
+            return { success: false, message: 'Błąd aktualizacji statusu' };
+        }
+
+        console.log(`✅ Advertisement ${advertisementId} status changed to ${newStatus ? 'published to Vinted' : 'not published to Vinted'}`);
+        return { 
+            success: true, 
+            is_published_to_vinted: newStatus 
+        };
+    } catch (error) {
+        console.error('Error in toggleVintedPublishStatus:', error);
+        return { success: false, message: 'Błąd serwera' };
     }
 }

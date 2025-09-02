@@ -1728,6 +1728,18 @@ export class VintedAutomation {
             // Określ kategorię główną na podstawie rodzaju
             const categoryInfo = this.determineCategoryFromRodzaj(advertisement.rodzaj || '');
             
+            console.log('🔍 Category mapping result:', {
+                rodzaj: advertisement.rodzaj,
+                mainCategory: categoryInfo.mainCategory,
+                mainCategoryId: categoryInfo.mainCategoryId,
+                subCategory: categoryInfo.subCategory,
+                subCategoryId: categoryInfo.subCategoryId,
+                intermediateCategory: categoryInfo.intermediateCategory,
+                intermediateCategoryId: categoryInfo.intermediateCategoryId,
+                finalCategory: categoryInfo.finalCategory,
+                finalCategoryId: categoryInfo.finalCategoryId
+            });
+            
             // Wybierz kategorię główną (Ubrania/Obuwie/Akcesoria)
             console.log(`📂 Selecting main category: ${categoryInfo.mainCategory}...`);
             await this.page.waitForSelector(`#catalog-${categoryInfo.mainCategoryId}`, { timeout: 5000 });
@@ -1917,7 +1929,7 @@ export class VintedAutomation {
                 subCategory: 'Koszule, T-shirty i podkoszulki',
                 subCategoryId: '76',
                 finalCategory: 'Podkoszulki',
-                finalCategoryId: '539'
+                finalCategoryId: '560'  // Poprawione ID zgodnie z HTML
             },
             'Swetry i bluzy z kapturem': {
                 mainCategory: 'Ubrania',
@@ -2480,7 +2492,6 @@ export class VintedAutomation {
                 'poszetki', 'poszetka', 'pocket square',
                 'krawaty i muszki', 'krawat', 'muszka', 'tie', 'bow tie',
                 'okulary', 'sunglasses',
-                'paski', 'pasek', 'belt',
                 'chusty', 'chustki', 'szal', 'scarf'
             ];
             
@@ -2534,6 +2545,29 @@ export class VintedAutomation {
                 return;
             }
 
+            // Mapowanie rozmiarów specyficznych dla kategorii
+            const mapSizeForCategory = (size: string, category: string): string[] => {
+                const categoryLower = category.toLowerCase();
+                const sizeLower = size.toLowerCase();
+                
+                // Mapowanie dla pasków
+                if (categoryLower.includes('paski') || categoryLower.includes('pasek')) {
+                    if (sizeLower === 'uniwersalny') {
+                        return ['Regulowany', 'Uniwersalny', 'One Size', 'OS', 'Universal', 'uniwersalny'];
+                    }
+                }
+                
+                // Mapowanie dla portfeli
+                if (categoryLower.includes('portfel')) {
+                    if (sizeLower === 'uniwersalny') {
+                        return ['Uniwersalny', 'One Size', 'OS', 'Universal', 'uniwersalny'];
+                    }
+                }
+                
+                // Domyślnie zwróć oryginalny rozmiar
+                return [size];
+            };
+
             // Funkcja do normalizacji rozmiarów 
             const normalizeSize = (size: string): string => {
                 // Konwertuj kropkę na przecinek dla rozmiarów butów (np. 48.5 → 48,5)
@@ -2543,17 +2577,29 @@ export class VintedAutomation {
                 return normalized;
             };
 
+            // Pobierz możliwe warianty rozmiaru dla kategorii
+            const categoryMappedSizes = mapSizeForCategory(targetSize, advertisement.rodzaj || '');
+            console.log(`🎯 Category-mapped sizes for "${advertisement.rodzaj}":`, categoryMappedSizes);
+
             const normalizedTargetSize = normalizeSize(targetSize);
             console.log(`🎯 Normalized target size: "${normalizedTargetSize}"`);
 
-            // Alternatywne formaty do przetestowania
-            const sizeVariants = [
-                targetSize,                    // oryginalny format
-                normalizedTargetSize,          // z przecinkiem zamiast kropki
-                targetSize.replace(/\./g, ','), // tylko zamiana kropki na przecinek
-                targetSize.replace(/,/g, '.'), // tylko zamiana przecinka na kropkę
-            ].filter((v, i, arr) => arr.indexOf(v) === i); // usuń duplikaty
-
+            // Alternatywne formaty do przetestowania - kombinuj mapowanie kategorii z normalizacją
+            const allSizeVariants = [];
+            
+            // Dodaj wszystkie mapowane rozmiary i ich znormalizowane wersje
+            for (const mappedSize of categoryMappedSizes) {
+                allSizeVariants.push(
+                    mappedSize,                           // oryginalny mapowany rozmiar
+                    normalizeSize(mappedSize),            // znormalizowana wersja
+                    mappedSize.replace(/\./g, ','),       // zamiana kropki na przecinek
+                    mappedSize.replace(/,/g, '.')         // zamiana przecinka na kropkę
+                );
+            }
+            
+            // Usuń duplikaty
+            const sizeVariants = [...new Set(allSizeVariants)];
+            
             console.log(`🔍 Will try size variants:`, sizeVariants);            // Spróbuj znaleźć rozmiar na różne sposoby
             let sizeSelected = false;
             
@@ -2767,7 +2813,8 @@ export class VintedAutomation {
                 'nowy bez metki': 'Nowy bez metki', 
                 'bardzo dobry': 'Bardzo dobry',
                 'dobry': 'Dobry',
-                'zadowalający': 'Zadowalający'
+                'zadowalający': 'Zadowalający',
+                'zadowalające': 'Zadowalający'  // Dodanie mapowania dla formy z końcówką "-e"
             };
             
             const dbCondition = advertisement.stan?.toLowerCase().trim() || '';
@@ -3019,80 +3066,86 @@ export class VintedAutomation {
                 const colorElements = await this.page.$$('li .web_ui__Cell__cell[id^="color-"]');
                 console.log(`🔍 Found ${colorElements.length} color elements`);
                 
+                // Debug: wypisz wszystkie dostępne kolory
+                console.log('🎨 Available colors:');
+                for (const element of colorElements) {
+                    try {
+                        const titleText = await element.$eval('.web_ui__Cell__title', el => el.textContent?.trim() || '');
+                        const colorId = await element.evaluate(el => el.id);
+                        console.log(`   - ${titleText} (ID: ${colorId})`);
+                    } catch (e) {
+                        // Ignore elements without title
+                    }
+                }
+                
+                console.log(`🎯 Looking for exact match: "${targetColor}"`);
+                
                 for (const element of colorElements) {
                     try {
                         const titleText = await element.$eval('.web_ui__Cell__title', el => el.textContent?.trim() || '');
                         console.log(`📋 Checking color: "${titleText}"`);
                         
                         if (titleText.toLowerCase() === targetColor.toLowerCase()) {
-                            // Kliknij checkbox wewnątrz elementu koloru
-                            const checkbox = await element.$('input[type="checkbox"]');
-                            if (checkbox) {
-                                await checkbox.click();
-                                console.log(`✅ Selected color: ${titleText}`);
+                            // Znajdź konkretny ID tego elementu koloru i checkbox
+                            const colorId = await element.evaluate(el => el.id);
+                            const colorNumber = colorId.replace('color-', '');
+                            const checkboxId = `color-checkbox-${colorNumber}`;
+                            
+                            console.log(`🎯 Found target color "${titleText}" with element ID: ${colorId}, checkbox ID: ${checkboxId}`);
+                            
+                            // Kliknij bezpośrednio w checkbox używając jego ID
+                            try {
+                                await this.page.click(`#${checkboxId}`);
+                                console.log(`✅ Clicked checkbox #${checkboxId} for color: ${titleText}`);
                                 colorSelected = true;
                                 
-                                // Poczekaj na aktualizację UI
-                                await new Promise(resolve => setTimeout(resolve, 1500));
+                                // Sprawdź od razu czy checkbox jest zaznaczony
+                                await new Promise(resolve => setTimeout(resolve, 300));
+                                const isChecked = await this.page.evaluate((id) => {
+                                    const checkbox = document.getElementById(id) as HTMLInputElement;
+                                    return checkbox ? checkbox.checked : false;
+                                }, checkboxId);
                                 
-                                // Sprawdź czy kolor pozostał wybrany
-                                const isStillSelected = await this.verifyColorSelection(targetColor);
-                                if (!isStillSelected) {
-                                    console.log('⚠️  Color was deselected, trying JavaScript click...');
-                                    
-                                    // Użyj JavaScript click jako fallback
-                                    await this.page.evaluate((colorText) => {
-                                        const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
-                                        for (const el of colorElements) {
-                                            const titleEl = el.querySelector('.web_ui__Cell__title');
-                                            if (titleEl && titleEl.textContent?.trim().toLowerCase() === colorText.toLowerCase()) {
-                                                const checkbox = el.querySelector('input[type="checkbox"]') as HTMLInputElement;
-                                                if (checkbox) {
-                                                    checkbox.checked = true;
-                                                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                                                    return true;
-                                                }
-                                            }
-                                        }
-                                        return false;
-                                    }, targetColor);
-                                    
-                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                console.log(`🔍 Checkbox ${checkboxId} checked status: ${isChecked}`);
+                                
+                                if (!isChecked) {
+                                    console.log(`⚠️  Checkbox not checked, trying alternative click...`);
+                                    // Spróbuj kliknąć w element koloru zamiast checkbox
+                                    await this.page.click(`#${colorId}`);
+                                    await new Promise(resolve => setTimeout(resolve, 300));
                                 }
                                 
-                                break;
-                            } else {
-                                // Jeśli nie ma checkbox, kliknij na element
+                            } catch (checkboxError) {
+                                console.log(`⚠️  Checkbox click failed, trying element click...`);
+                                // Fallback - kliknij na element koloru
                                 await element.click();
                                 console.log(`✅ Selected color (by element click): ${titleText}`);
                                 colorSelected = true;
-                                
-                                // Poczekaj na aktualizację UI
-                                await new Promise(resolve => setTimeout(resolve, 1500));
-                                
-                                // Sprawdź czy kolor pozostał wybrany
-                                const isStillSelected = await this.verifyColorSelection(targetColor);
-                                if (!isStillSelected) {
-                                    console.log('⚠️  Color was deselected, trying JavaScript click...');
-                                    
-                                    // Użyj JavaScript click jako fallback
-                                    await this.page.evaluate((colorText) => {
-                                        const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
-                                        for (const el of colorElements) {
-                                            const titleEl = el.querySelector('.web_ui__Cell__title');
-                                            if (titleEl && titleEl.textContent?.trim().toLowerCase() === colorText.toLowerCase()) {
-                                                (el as HTMLElement).click();
-                                                return true;
-                                            }
-                                        }
-                                        return false;
-                                    }, targetColor);
-                                    
-                                    await new Promise(resolve => setTimeout(resolve, 1000));
-                                }
-                                
-                                break;
                             }
+                            
+                            // Poczekaj dłużej przed zamknięciem dropdown
+                            console.log('🔄 Waiting before closing color dropdown...');
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            
+                            // Zamknij dropdown przez kliknięcie w konkretny element - nota o wysyłce
+                            try {
+                                console.log('🔄 Closing color dropdown by clicking shipping note...');
+                                await this.page.click('.web_ui__Note__note');
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                                console.log('✅ Color dropdown closed by clicking shipping note');
+                            } catch (noteError) {
+                                // Fallback - kliknij w inne bezpieczne miejsce
+                                try {
+                                    console.log('🔄 Fallback: closing dropdown with alternative click...');
+                                    await this.page.click('h1, .page-title');
+                                    await new Promise(resolve => setTimeout(resolve, 500));
+                                    console.log('✅ Color dropdown closed with fallback method');
+                                } catch (error) {
+                                    console.log('⚠️  Could not close dropdown, but color selected');
+                                }
+                            }
+                            
+                            break;
                         }
                     } catch (elementError) {
                         // Element może nie mieć tytułu, kontynuuj
@@ -3107,18 +3160,35 @@ export class VintedAutomation {
                 console.log(`⚠️  Could not find color "${targetColor}" in the list`);
                 console.log('💡 Available colors can be selected manually');
             } else {
-                // Zamknij dropdown klikając gdzieś indziej
-                console.log('🔄 Closing color dropdown...');
-                await this.page.click('body'); // Kliknij w tło
+                // Finalna weryfikacja po zamknięciu dropdown
+                console.log('🔍 Final verification of color selection...');
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
-                // Sprawdź ponownie czy kolor jest wybrany
-                console.log('🔍 Final color verification...');
-                const finalCheck = await this.verifyColorSelection(targetColor);
-                if (finalCheck) {
-                    console.log('✅ Color selection confirmed');
+                const finalCheck = await this.page.evaluate((targetColor) => {
+                    const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
+                    const results = [];
+                    for (const el of colorElements) {
+                        const titleEl = el.querySelector('.web_ui__Cell__title');
+                        const checkbox = el.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                        if (titleEl && checkbox) {
+                            const colorName = titleEl.textContent?.trim() || '';
+                            const isChecked = checkbox.checked;
+                            if (isChecked) {
+                                results.push(colorName);
+                            }
+                        }
+                    }
+                    return results;
+                }, targetColor);
+                
+                console.log(`🔍 Currently selected colors: [${finalCheck.join(', ')}]`);
+                
+                if (finalCheck.includes(targetColor)) {
+                    console.log(`✅ Color "${targetColor}" is correctly selected`);
+                } else if (finalCheck.length > 0) {
+                    console.log(`⚠️  Different color(s) selected: [${finalCheck.join(', ')}] instead of "${targetColor}"`);
                 } else {
-                    console.log('⚠️  Color selection may not have persisted');
+                    console.log(`⚠️  No color appears to be selected`);
                 }
             }
             
@@ -3187,6 +3257,213 @@ export class VintedAutomation {
         } catch (error) {
             console.error('❌ Error filling price:', error);
             console.log('💡 Możesz wpisać cenę ręcznie w przeglądarce');
+        }
+    }
+
+    async verifyAllFields(advertisement: Advertisement): Promise<boolean> {
+        if (!this.page) return false;
+        
+        try {
+            console.log('🔍 Verifying all form fields...');
+            
+            let allFieldsOk = true;
+            const issues: string[] = [];
+            
+            // Sprawdź tytuł
+            try {
+                const title = await this.page.$eval(
+                    'input#title[data-testid="title--input"]',
+                    el => (el as HTMLInputElement).value
+                );
+                if (!title || title.trim().length === 0) {
+                    issues.push('❌ Title is empty');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Title: "${title.substring(0, 50)}..."`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify title');
+                allFieldsOk = false;
+            }
+            
+            // Sprawdź opis
+            try {
+                const description = await this.page.$eval(
+                    'textarea#description[data-testid="description--input"]',
+                    el => (el as HTMLTextAreaElement).value
+                );
+                if (!description || description.trim().length === 0) {
+                    issues.push('❌ Description is empty');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Description: ${description.length} characters`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify description');
+                allFieldsOk = false;
+            }
+            
+            // Sprawdź kategorię
+            try {
+                const category = await this.page.$eval(
+                    'input[data-testid="catalog-select-dropdown-input"]',
+                    el => (el as HTMLInputElement).value
+                );
+                if (!category || category.trim().length === 0) {
+                    issues.push('❌ Category is not selected');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Category: "${category}"`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify category');
+                allFieldsOk = false;
+            }
+            
+            // Sprawdź markę
+            try {
+                const brand = await this.page.$eval(
+                    'input[data-testid="brand-select-dropdown-input"]',
+                    el => (el as HTMLInputElement).value
+                );
+                if (!brand || brand.trim().length === 0) {
+                    issues.push('❌ Brand is not selected');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Brand: "${brand}"`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify brand');
+                allFieldsOk = false;
+            }
+            
+            // Sprawdź rozmiar
+            try {
+                const size = await this.page.$eval(
+                    'input[data-testid="size-select-dropdown-input"]',
+                    el => (el as HTMLInputElement).value
+                );
+                if (!size || size.trim().length === 0) {
+                    issues.push('❌ Size is not selected');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Size: "${size}"`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify size');
+                allFieldsOk = false;
+            }
+            
+            // Sprawdź stan
+            try {
+                const condition = await this.page.$eval(
+                    'input[data-testid="condition-select-dropdown-input"]',
+                    el => (el as HTMLInputElement).value
+                );
+                if (!condition || condition.trim().length === 0) {
+                    issues.push('❌ Condition is not selected');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Condition: "${condition}"`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify condition');
+                allFieldsOk = false;
+            }
+            
+            // Sprawdź kolor (opcjonalny)
+            try {
+                const color = await this.page.$eval(
+                    'input[data-testid="color-select-dropdown-input"]',
+                    el => (el as HTMLInputElement).value || el.getAttribute('value') || ''
+                );
+                
+                if (advertisement.color && advertisement.color.trim().length > 0) {
+                    // Sprawdź czy wybrany kolor pasuje do oczekiwanego
+                    const isSelected = color.toLowerCase().includes(advertisement.color.toLowerCase()) ||
+                                      advertisement.color.toLowerCase().includes(color.toLowerCase());
+                    
+                    // Dodatkowo sprawdź czy checkbox koloru jest zaznaczony
+                    const isColorActuallySelected = await this.page.evaluate((targetColor) => {
+                        const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
+                        for (const el of colorElements) {
+                            const titleEl = el.querySelector('.web_ui__Cell__title');
+                            if (titleEl && titleEl.textContent?.trim().toLowerCase() === targetColor.toLowerCase()) {
+                                const checkbox = el.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                                return checkbox ? checkbox.checked : false;
+                            }
+                        }
+                        return false;
+                    }, advertisement.color);
+                    
+                    if (isColorActuallySelected) {
+                        console.log(`✅ Color: "${advertisement.color}" (verified via checkbox)`);
+                    } else if (isSelected && color.trim().length > 0) {
+                        console.log(`✅ Color: "${color}" (verified via input field)`);
+                    } else if (!isSelected && (!color || color.trim().length === 0)) {
+                        console.log(`⚠️  Color expected "${advertisement.color}" but not found in field or checkbox`);
+                        // Nie dodawaj do issues - kolor może być wybrany ale nie widoczny w polu
+                    } else {
+                        console.log(`⚠️  Color verification inconclusive: field="${color}", expected="${advertisement.color}"`);
+                    }
+                } else {
+                    if (color && color.trim().length > 0) {
+                        console.log(`✅ Color: "${color}"`);
+                    } else {
+                        console.log(`ℹ️  Color: not specified`);
+                    }
+                }
+            } catch (error) {
+                console.log('ℹ️  Color field not found or not verifiable');
+            }
+            
+            // Sprawdź cenę
+            try {
+                const price = await this.page.$eval(
+                    'input[data-testid="price-input--input"]',
+                    el => (el as HTMLInputElement).value
+                );
+                if (!price || price.trim().length === 0) {
+                    issues.push('❌ Price is empty');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Price: "${price} zł"`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify price');
+                allFieldsOk = false;
+            }
+            
+            // Sprawdź zdjęcia
+            try {
+                const photosCount = await this.page.evaluate(() => {
+                    const photoElements = document.querySelectorAll('img[src*="blob:"], .photo-preview, .image-preview');
+                    return photoElements.length;
+                });
+                
+                if (photosCount === 0) {
+                    issues.push('❌ No photos uploaded');
+                    allFieldsOk = false;
+                } else {
+                    console.log(`✅ Photos: ${photosCount} uploaded`);
+                }
+            } catch (error) {
+                issues.push('❌ Could not verify photos');
+                allFieldsOk = false;
+            }
+            
+            if (allFieldsOk) {
+                console.log('🎉 All form fields verified successfully!');
+            } else {
+                console.log('⚠️  Some issues found with form fields:');
+                issues.forEach(issue => console.log(`   ${issue}`));
+            }
+            
+            return allFieldsOk;
+            
+        } catch (error) {
+            console.error('❌ Error verifying form fields:', error);
+            return false;
         }
     }
 
@@ -3301,6 +3578,22 @@ export class VintedAutomation {
     }
 
     async processAdvertisement(ad: Advertisement) {
+        // Validate required fields before processing
+        if (!ad.marka || !ad.rodzaj || !ad.rozmiar || !ad.stan) {
+            console.log(`❌ Skipping advertisement ${ad.id}: missing required fields`);
+            console.log(`   - Marka: ${ad.marka || 'MISSING'}`);
+            console.log(`   - Rodzaj: ${ad.rodzaj || 'MISSING'}`);
+            console.log(`   - Rozmiar: ${ad.rozmiar || 'MISSING'}`);
+            console.log(`   - Stan: ${ad.stan || 'MISSING'}`);
+            throw new Error('Advertisement has missing required fields');
+        }
+
+        // Validate photos
+        if (!ad.photo_uris || ad.photo_uris.length === 0) {
+            console.log(`❌ Skipping advertisement ${ad.id}: no photos available`);
+            throw new Error('Advertisement has no photos');
+        }
+
         console.log(`🔄 Processing advertisement: ${ad.marka} ${ad.rodzaj}`);
         
         // Przygotuj ogłoszenie - wygeneruj tytuł i opis
@@ -3417,6 +3710,16 @@ export class VintedAutomation {
             console.log('💰 Filling price...');
             await this.fillPrice(ad);
             console.log('✅ Price filled');
+            
+            // Zweryfikuj wszystkie pola przed zapisaniem
+            console.log('🔍 Final verification before saving...');
+            const allFieldsOk = await this.verifyAllFields(ad);
+            
+            if (!allFieldsOk) {
+                console.log('⚠️  Some fields are missing or incorrect. Please check manually.');
+                console.log('💡 You can continue manually in the browser and save the draft.');
+                // Mimo problemów, kontynuuj z zapisem - użytkownik może poprawić ręcznie
+            }
             
             // Zapisz jako wersję roboczą i oznacz jako ukończone
             console.log('💾 Finalizing advertisement...');

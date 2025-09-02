@@ -163,13 +163,27 @@ body {
     border-left: 4px solid #10b981;
 }
 
+.item-card.published-vinted {
+    border-left: 4px solid #6b7280;
+    background-color: #f3f4f6;
+}
+
+.item-card.published-vinted .title-preview {
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    color: white;
+}
+
+.item-card.published-vinted .item-number {
+    background-color: #6b7280;
+}
+
 .item-card {
     position: relative;
 }
 
 .button-container {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: 12px;
     margin-top: 16px;
 }
@@ -200,6 +214,32 @@ body {
 
 .copy-desc-btn {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.vinted-status-btn {
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    color: white;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vinted-status-btn.published {
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.vinted-status-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .copy-btn:hover {
