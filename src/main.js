@@ -87,6 +87,80 @@ function getShortenedProductType(rodzaj) {
     return typeMap[rodzaj] || rodzaj;
 }
 
+// Function to get Grailed category mapping
+function getGrailedCategoryMapping(rodzaj) {
+    if (!rodzaj) return { department: 'Menswear', category: 'Tops' };
+    
+    const categoryMap = {
+        // Tops
+        'kurtka': { department: 'Menswear', category: 'Outerwear' },
+        'Koszule w kratkę': { department: 'Menswear', category: 'Tops' },
+        'Koszule dżinsowe': { department: 'Menswear', category: 'Tops' },
+        'Koszule gładkie': { department: 'Menswear', category: 'Tops' },
+        'Koszulki z nadrukiem': { department: 'Menswear', category: 'Tops' },
+        'Koszule w paski': { department: 'Menswear', category: 'Tops' },
+        'T-shirty gładkie': { department: 'Menswear', category: 'Tops' },
+        'T-shirty z nadrukiem': { department: 'Menswear', category: 'Tops' },
+        'T-shirty w paski': { department: 'Menswear', category: 'Tops' },
+        'Koszulki polo': { department: 'Menswear', category: 'Tops' },
+        'Koszulki z długim rękawem': { department: 'Menswear', category: 'Tops' },
+        'Podkoszulki': { department: 'Menswear', category: 'Tops' },
+        'Bluzy': { department: 'Menswear', category: 'Tops' },
+        'Swetry i bluzy z kapturem': { department: 'Menswear', category: 'Tops' },
+        'Bluzy rozpinane': { department: 'Menswear', category: 'Tops' },
+        'Kardigany': { department: 'Menswear', category: 'Tops' },
+        'Swetry z okrągłym dekoltem': { department: 'Menswear', category: 'Tops' },
+        'Swetry w serek': { department: 'Menswear', category: 'Tops' },
+        'Swetry z golfem': { department: 'Menswear', category: 'Tops' },
+        'Długie swetry': { department: 'Menswear', category: 'Tops' },
+        'Swetry z dzianiny': { department: 'Menswear', category: 'Tops' },
+        'Kamizelki': { department: 'Menswear', category: 'Tops' },
+        
+        // Bottoms
+        'Spodnie z szerokimi nogawkami': { department: 'Menswear', category: 'Bottoms' },
+        'Szorty cargo': { department: 'Menswear', category: 'Bottoms' },
+        'Szorty chinosy': { department: 'Menswear', category: 'Bottoms' },
+        'Szorty dżinsowe': { department: 'Menswear', category: 'Bottoms' },
+        
+        // Footwear
+        'Mokasyny, buty żeglarskie, loafersy': { department: 'Menswear', category: 'Footwear' },
+        'Chodaki i mule': { department: 'Menswear', category: 'Footwear' },
+        'Espadryle': { department: 'Menswear', category: 'Footwear' },
+        'Klapki i japonki': { department: 'Menswear', category: 'Footwear' },
+        'Obuwie wizytowe': { department: 'Menswear', category: 'Footwear' },
+        'Sandały': { department: 'Menswear', category: 'Footwear' },
+        'Kapcie': { department: 'Menswear', category: 'Footwear' },
+        'Obuwie sportowe': { department: 'Menswear', category: 'Footwear' },
+        'Sneakersy, trampki i tenisówki': { department: 'Menswear', category: 'Footwear' },
+        
+        // Accessories
+        'Chusty i chustki': { department: 'Menswear', category: 'Accessories' },
+        'Paski': { department: 'Menswear', category: 'Accessories' },
+        'Szelki': { department: 'Menswear', category: 'Accessories' },
+        'Rękawiczki': { department: 'Menswear', category: 'Accessories' },
+        'Chusteczki': { department: 'Menswear', category: 'Accessories' },
+        'Kapelusze i czapki': { department: 'Menswear', category: 'Accessories' },
+        'Biżuteria': { department: 'Menswear', category: 'Accessories' },
+        'Poszetki': { department: 'Menswear', category: 'Accessories' },
+        'Szaliki i szale': { department: 'Menswear', category: 'Accessories' },
+        'Okulary przeciwsłoneczne': { department: 'Menswear', category: 'Accessories' },
+        'Krawaty i muszki': { department: 'Menswear', category: 'Accessories' },
+        'Zegarki': { department: 'Menswear', category: 'Accessories' },
+        'Plecaki': { department: 'Menswear', category: 'Accessories' },
+        'Teczki': { department: 'Menswear', category: 'Accessories' },
+        'Nerki': { department: 'Menswear', category: 'Accessories' },
+        'Pokrowce na ubrania': { department: 'Menswear', category: 'Accessories' },
+        'Torby na siłownię': { department: 'Menswear', category: 'Accessories' },
+        'Torby podróżne': { department: 'Menswear', category: 'Accessories' },
+        'Walizki': { department: 'Menswear', category: 'Accessories' },
+        'Listonoszki': { department: 'Menswear', category: 'Accessories' },
+        'Torby na ramię': { department: 'Menswear', category: 'Accessories' },
+        'Portfele': { department: 'Menswear', category: 'Accessories' }
+    };
+    
+    return categoryMap[rodzaj] || { department: 'Menswear', category: 'Tops' };
+}
+
 // Fetch style by product type
 async function fetchStyleByType(productType) {
     try {
@@ -265,6 +339,14 @@ async function createAdvertisementCard(ad, index, styles) {
     vintedStatusButton.textContent = ad.is_published_to_vinted ? '✓ Opublikowane' : '⊕ Nie opublikowane';
     vintedStatusButton.onclick = () => toggleVintedStatus(ad.id, vintedStatusButton, card);
     buttonContainer.appendChild(vintedStatusButton);
+
+    // Grailed status button
+    const grailedStatusButton = document.createElement('button');
+    grailedStatusButton.className = `grailed-status-btn ${ad.is_published_to_grailed ? 'published' : ''}`;
+    grailedStatusButton.textContent = ad.is_published_to_grailed ? '✓ Grailed' : '🏷️ Grailed';
+    grailedStatusButton.style.cssText = `background: ${ad.is_published_to_grailed ? '#10b981' : '#f59e0b'}; color: white; padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin: 2px;`;
+    grailedStatusButton.onclick = () => toggleGrailedStatus(ad.id, grailedStatusButton, card);
+    buttonContainer.appendChild(grailedStatusButton);
     
     card.appendChild(buttonContainer);
 
@@ -494,6 +576,68 @@ async function copyAdvertisementToClipboard(ad) {
     }
 }
 
+// Toggle Grailed publication status
+async function toggleGrailedStatus(advertisementId, button, card) {
+    try {
+        showMessage('🔄 Aktualizuję status Grailed...');
+        
+        const response = await fetch('/api/grailed/toggle-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                advertisementId: advertisementId 
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Aktualizuj UI
+            if (result.is_published_to_grailed) {
+                button.textContent = '✓ Grailed';
+                button.style.background = '#10b981';
+                showMessage('✅ Oznaczono jako opublikowane na Grailed');
+            } else {
+                button.textContent = '🏷️ Grailed';
+                button.style.background = '#f59e0b';
+                showMessage('✅ Oznaczono jako nieopublikowane na Grailed');
+            }
+        } else {
+            showMessage('❌ Błąd: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error toggling Grailed status:', error);
+        showMessage('❌ Błąd zmiany statusu Grailed: ' + error.message);
+    }
+}
+
+// Function to launch Grailed automation
+async function launchGrailedAutomation() {
+    try {
+        showMessage('🏷️ Uruchamiam automatyzację Grailed...');
+        
+        const response = await fetch('/api/grailed/automate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showMessage('✅ ' + result.message);
+        } else {
+            showMessage('❌ ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error launching Grailed automation:', error);
+        showMessage('❌ Błąd uruchamiania Grailed: ' + error.message);
+    }
+}
+
 // Initialize the application
 async function init() {
     const container = document.getElementById('itemsContainer');
@@ -556,6 +700,43 @@ async function init() {
         automationContainer.appendChild(buttonRow);
         container.appendChild(automationContainer);
         
+        // Add Grailed automation section
+        const grailedContainer = document.createElement('div');
+        grailedContainer.className = 'automation-container';
+        grailedContainer.style.cssText = 'margin: 20px 0; text-align: center; padding: 20px; background: #fef3c7; border-radius: 12px; border: 2px solid #f59e0b;';
+        
+        const grailedTitle = document.createElement('h3');
+        grailedTitle.textContent = '🏷️ Automatyzacja Grailed';
+        grailedTitle.style.cssText = 'margin: 0 0 10px 0; color: #92400e;';
+        
+        const grailedDescription = document.createElement('p');
+        grailedDescription.textContent = 'Krok 1: Uruchom przeglądarkę i zaloguj się na Grailed. Krok 2: Podłącz automatyzację do publikacji ogłoszeń.';
+        grailedDescription.style.cssText = 'margin: 0 0 15px 0; color: #64748b; font-size: 14px;';
+        
+        const grailedButtonRow = document.createElement('div');
+        grailedButtonRow.style.cssText = 'display: flex; gap: 12px; justify-content: center; align-items: center;';
+        
+        // Launch Chrome for Grailed button
+        const launchChromeGrailedButton = document.createElement('button');
+        launchChromeGrailedButton.textContent = '🌐 Uruchom przeglądarkę';
+        launchChromeGrailedButton.className = 'automation-btn launch-chrome-grailed-btn';
+        launchChromeGrailedButton.style.cssText = 'background: #dc2626; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
+        launchChromeGrailedButton.onclick = () => launchChromeForGrailed();
+        grailedButtonRow.appendChild(launchChromeGrailedButton);
+        
+        // Launch Grailed automation button
+        const launchGrailedButton = document.createElement('button');
+        launchGrailedButton.textContent = '🏷️ Podłącz automatyzację';
+        launchGrailedButton.className = 'automation-btn launch-grailed-btn';
+        launchGrailedButton.style.cssText = 'background: #f59e0b; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
+        launchGrailedButton.onclick = () => launchGrailedAutomation();
+        grailedButtonRow.appendChild(launchGrailedButton);
+        
+        grailedContainer.appendChild(grailedTitle);
+        grailedContainer.appendChild(grailedDescription);
+        grailedContainer.appendChild(grailedButtonRow);
+        container.appendChild(grailedContainer);
+        
         // Create and append advertisement cards
         for (let i = 0; i < data.advertisements.length; i++) {
             const ad = data.advertisements[i];
@@ -593,6 +774,31 @@ async function launchChromeForLogin() {
     } catch (error) {
         console.error('Error launching Chrome:', error);
         showMessage('❌ Błąd uruchamiania Chrome: ' + error.message);
+    }
+}
+
+// Function to launch Chrome for Grailed
+async function launchChromeForGrailed() {
+    try {
+        showMessage('🌐 Uruchamiam Chrome dla Grailed...');
+        
+        const response = await fetch('/api/chrome/launch-grailed', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showMessage('✅ ' + result.message + ' - Zaloguj się na grailed.com');
+        } else {
+            showMessage('❌ ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error launching Chrome for Grailed:', error);
+        showMessage('❌ Błąd uruchamiania Chrome dla Grailed: ' + error.message);
     }
 }
 

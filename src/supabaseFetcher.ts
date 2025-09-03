@@ -114,6 +114,49 @@ export async function fetchUnpublishedToVintedAdvertisements() {
     }
 }
 
+export async function fetchUnpublishedToGrailedAdvertisements() {
+    try {
+        const { data, error } = await supabase
+            .from('advertisements')
+            .select('*')
+            .eq('is_published_to_grailed', false)
+            .not('marka', 'is', null)
+            .not('rodzaj', 'is', null)
+            .not('rozmiar', 'is', null)
+            .not('stan', 'is', null)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching unpublished to Grailed advertisements:', error);
+            return [];
+        }
+
+        // Additional filter for empty strings and ensure photos exist
+        const validAdvertisements = (data || []).filter(ad => {
+            const hasRequiredFields = ad.marka && ad.rodzaj && ad.rozmiar && ad.stan;
+            const hasPhotos = ad.photo_uris && ad.photo_uris.length > 0;
+            
+            if (!hasRequiredFields) {
+                console.log(`⚠️ Skipping advertisement ${ad.id}: missing required fields (marka: ${ad.marka}, rodzaj: ${ad.rodzaj}, rozmiar: ${ad.rozmiar}, stan: ${ad.stan})`);
+                return false;
+            }
+            
+            if (!hasPhotos) {
+                console.log(`⚠️ Skipping advertisement ${ad.id}: no photos available`);
+                return false;
+            }
+            
+            return true;
+        });
+
+        console.log(`📦 Found ${validAdvertisements.length} unpublished advertisements ready for Grailed`);
+        return validAdvertisements;
+    } catch (error) {
+        console.error('Error in fetchUnpublishedToGrailedAdvertisements:', error);
+        return [];
+    }
+}
+
 export async function fetchStyles() {
     try {
         const { data, error } = await supabase
@@ -257,6 +300,64 @@ export async function toggleVintedPublishStatus(advertisementId: string) {
         };
     } catch (error) {
         console.error('Error in toggleVintedPublishStatus:', error);
+        return { success: false, message: 'Błąd serwera' };
+    }
+}
+
+export async function updateGrailedPublishStatus(advertisementId: string, isPublished: boolean) {
+    try {
+        const { error } = await supabase
+            .from('advertisements')
+            .update({ is_published_to_grailed: isPublished })
+            .eq('id', advertisementId);
+
+        if (error) {
+            console.error('Error updating Grailed publish status:', error);
+            return { success: false, message: 'Błąd aktualizacji statusu Grailed' };
+        }
+
+        console.log(`✅ Advertisement ${advertisementId} Grailed status updated to ${isPublished ? 'published' : 'not published'}`);
+        return { success: true };
+    } catch (error) {
+        console.error('Error in updateGrailedPublishStatus:', error);
+        return { success: false, message: 'Błąd serwera' };
+    }
+}
+
+export async function toggleGrailedPublishStatus(advertisementId: string) {
+    try {
+        // Pobierz aktualny status
+        const { data, error } = await supabase
+            .from('advertisements')
+            .select('is_published_to_grailed')
+            .eq('id', advertisementId)
+            .single();
+
+        if (error) {
+            console.error('Error fetching current Grailed status:', error);
+            return { success: false, message: 'Błąd pobierania statusu' };
+        }
+
+        // Przełącz status
+        const newStatus = !data.is_published_to_grailed;
+        
+        const { error: updateError } = await supabase
+            .from('advertisements')
+            .update({ is_published_to_grailed: newStatus })
+            .eq('id', advertisementId);
+
+        if (updateError) {
+            console.error('Error updating Grailed publish status:', updateError);
+            return { success: false, message: 'Błąd aktualizacji statusu' };
+        }
+
+        console.log(`✅ Advertisement ${advertisementId} status changed to ${newStatus ? 'published to Grailed' : 'not published to Grailed'}`);
+        return { 
+            success: true, 
+            is_published_to_grailed: newStatus 
+        };
+    } catch (error) {
+        console.error('Error in toggleGrailedPublishStatus:', error);
         return { success: false, message: 'Błąd serwera' };
     }
 }
