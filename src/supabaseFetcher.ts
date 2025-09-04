@@ -120,6 +120,7 @@ export async function fetchUnpublishedToGrailedAdvertisements() {
             .from('advertisements')
             .select('*')
             .eq('is_published_to_grailed', false)
+            .eq('is_completed', true)
             .not('marka', 'is', null)
             .not('rodzaj', 'is', null)
             .not('rozmiar', 'is', null)
@@ -149,7 +150,7 @@ export async function fetchUnpublishedToGrailedAdvertisements() {
             return true;
         });
 
-        console.log(`📦 Found ${validAdvertisements.length} unpublished advertisements ready for Grailed`);
+        console.log(`📦 Found ${validAdvertisements.length} completed and unpublished advertisements ready for Grailed`);
         return validAdvertisements;
     } catch (error) {
         console.error('Error in fetchUnpublishedToGrailedAdvertisements:', error);

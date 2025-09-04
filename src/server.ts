@@ -156,53 +156,6 @@ const server = serve({
                 }
             }
 
-            // Endpoint do uruchomienia przeglądarki dla Grailed
-            if (url.pathname === "/api/chrome/launch-grailed" && req.method === "POST") {
-                try {
-                    console.log('🏷️ Uruchamiam Chrome dla Grailed...');
-                    
-                    const { GrailedAutomation } = await import('./grailedAutomation');
-                    const automation = new GrailedAutomation();
-                    
-                    // Uruchom Chrome i przejdź na grailed.com
-                    const chromeStarted = await automation.startChromeWithGrailed();
-                    
-                    if (chromeStarted) {
-                        return new Response(JSON.stringify({ 
-                            success: true, 
-                            message: "Chrome uruchomiony z grailed.com! Zaloguj się, a następnie kliknij 'Podłącz automatyzację'." 
-                        }), {
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Access-Control-Allow-Origin": "*"
-                            }
-                        });
-                    } else {
-                        return new Response(JSON.stringify({ 
-                            success: false, 
-                            message: "Nie udało się uruchomić Chrome dla Grailed" 
-                        }), {
-                            status: 500,
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Access-Control-Allow-Origin": "*"
-                            }
-                        });
-                    }
-                } catch (error) {
-                    return new Response(JSON.stringify({ 
-                        success: false, 
-                        message: "Błąd uruchamiania Chrome dla Grailed: " + error 
-                    }), {
-                        status: 500,
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Access-Control-Allow-Origin": "*"
-                        }
-                    });
-                }
-            }
-
             // Endpoint do podłączenia automatyzacji do istniejącej przeglądarki
             if (url.pathname === "/api/vinted/connect" && req.method === "POST") {
                 try {
@@ -301,105 +254,6 @@ const server = serve({
                 }
             }
 
-            // Endpoint dla automatyzacji Grailed
-            if (url.pathname === "/api/grailed/automate" && req.method === "POST") {
-                try {
-                    console.log('🏷️ Starting Grailed automation from web interface...');
-                    
-                    // Import dynamically to avoid issues
-                    const { runGrailedAutomationWithExistingBrowser } = await import('./grailedAutomation');
-                    
-                    // Run automation in background
-                    runGrailedAutomationWithExistingBrowser()
-                        .then(() => {
-                            console.log('✅ Grailed automation completed successfully');
-                        })
-                        .catch((error) => {
-                            console.error('❌ Grailed automation failed:', error);
-                        });
-                    
-                    return new Response(JSON.stringify({ 
-                        success: true, 
-                        message: "Grailed automation started. Check console for progress." 
-                    }), {
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Access-Control-Allow-Origin": "*"
-                        }
-                    });
-                } catch (error) {
-                    return new Response(JSON.stringify({ 
-                        success: false, 
-                        message: "Error starting Grailed automation: " + error 
-                    }), {
-                        status: 500,
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Access-Control-Allow-Origin": "*"
-                        }
-                    });
-                }
-            }
-
-            // Endpoint do przełączania statusu publikacji na Grailed
-            if (url.pathname === "/api/grailed/toggle-status" && req.method === "POST") {
-                try {
-                    const body = await req.json();
-                    const { advertisementId } = body;
-                    
-                    if (!advertisementId) {
-                        return new Response(JSON.stringify({ 
-                            success: false, 
-                            message: "Brak ID ogłoszenia" 
-                        }), {
-                            status: 400,
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Access-Control-Allow-Origin": "*"
-                            }
-                        });
-                    }
-
-                    const { toggleGrailedPublishStatus } = await import('./supabaseFetcher');
-                    const result = await toggleGrailedPublishStatus(advertisementId);
-                    
-                    if (result.success) {
-                        return new Response(JSON.stringify({ 
-                            success: true, 
-                            is_published_to_grailed: result.is_published_to_grailed,
-                            message: `Status Grailed zmieniony na: ${result.is_published_to_grailed ? 'opublikowane' : 'nieopublikowane'}` 
-                        }), {
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Access-Control-Allow-Origin": "*"
-                            }
-                        });
-                    } else {
-                        return new Response(JSON.stringify({ 
-                            success: false, 
-                            message: result.message || "Błąd zmiany statusu Grailed"
-                        }), {
-                            status: 500,
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Access-Control-Allow-Origin": "*"
-                            }
-                        });
-                    }
-                } catch (error) {
-                    return new Response(JSON.stringify({ 
-                        success: false, 
-                        message: "Błąd serwera: " + error 
-                    }), {
-                        status: 500,
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Access-Control-Allow-Origin": "*"
-                        }
-                    });
-                }
-            }
-
             // Endpoint dla stylów z Supabase
             if (url.pathname === "/api/styles") {
                 const data = await fetchStyles();
@@ -436,6 +290,85 @@ const server = serve({
                         "Access-Control-Allow-Origin": "*"
                     }
                 });
+            }
+
+            // ============= GRAILED AUTOMATION ENDPOINTS =============
+            
+            // Endpoint uruchomienia Chrome dla Grailed
+            if (url.pathname === "/api/chrome/launch-grailed") {
+                try {
+                    console.log('🚀 Uruchamiam Chrome do logowania na Grailed...');
+                    
+                    const { GrailedAutomation } = await import('./grailedAutomation');
+                    const automation = new GrailedAutomation();
+                    
+                    // Uruchom tylko Chrome bez automatyzacji
+                    const chromeStarted = await automation.startChromeWithGrailed();
+                    
+                    if (chromeStarted) {
+                        return new Response(JSON.stringify({ 
+                            success: true, 
+                            message: "Chrome uruchomiony na Grailed! Zaloguj się, a następnie kliknij 'Uruchom automatyzację Grailed'." 
+                        }), {
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Origin": "*"
+                            }
+                        });
+                    } else {
+                        return new Response(JSON.stringify({ 
+                            success: false, 
+                            message: "Nie udało się uruchomić Chrome" 
+                        }), {
+                            status: 500,
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Origin": "*"
+                            }
+                        });
+                    }
+                } catch (error) {
+                    return new Response(JSON.stringify({ 
+                        success: false, 
+                        message: "Błąd uruchomienia Chrome: " + error 
+                    }), {
+                        status: 500,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+            }
+
+            // Endpoint automatyzacji Grailed
+            if (url.pathname === "/api/grailed/automate" && req.method === "POST") {
+                try {
+                    const { runGrailedAutomationWithExistingBrowser } = await import('./grailedAutomation');
+                    const result = await runGrailedAutomationWithExistingBrowser();
+                    
+                    return new Response(JSON.stringify({ 
+                        success: true, 
+                        message: "Automatyzacja Grailed została uruchomiona" 
+                    }), {
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                } catch (error) {
+                    console.error("Grailed automation error:", error);
+                    return new Response(JSON.stringify({ 
+                        success: false, 
+                        message: "Błąd automatyzacji Grailed: " + error 
+                    }), {
+                        status: 500,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
             }
 
             // Obsługa głównej strony
