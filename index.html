@@ -13,6 +13,32 @@
       font-family: monospace;
       white-space: pre;
     }
+    /* Auth bar styles */
+    .auth-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+    .auth-username {
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .auth-btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .auth-btn.login { background: #2563eb; color: #fff; }
+    .auth-btn.logout { background: #ef4444; color: #fff; }
+    
   </style>
 </head>
 <body>
@@ -20,7 +46,8 @@
     <h1>Generator Opisów Produktów</h1>
     <div id="debug">Ładowanie...</div>
     <div id="messageBox"></div>
-    <div id="itemsContainer"></div>
+  <div id="authContainer" style="margin-bottom:16px;"></div>
+  <div id="itemsContainer"></div>
   </div>
   <script>
     window.onerror = function(msg, url, line) {

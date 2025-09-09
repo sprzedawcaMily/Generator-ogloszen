@@ -1,11 +1,21 @@
 import { supabase } from './supabaseClient';
 
-export async function fetchAdvertisements() {
+// NOTE: assumptions
+// - advertisements table has a column named `user_id` referencing users.id.
+//   If your column has a different name (owner_id, created_by, etc.), adjust the .eq(...) below.
+
+export async function fetchAdvertisements(userId?: string) {
     try {
-        const { data, error } = await supabase
+        let query: any = supabase
             .from('advertisements')
             .select('*')
             .order('created_at', { ascending: false });
+
+        if (userId) {
+            query = query.eq('user_id', userId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching advertisements:', error);
@@ -31,13 +41,20 @@ export async function fetchAdvertisements() {
     }
 }
 
-export async function fetchCompletedAdvertisements() {
+export async function fetchCompletedAdvertisements(userId?: string) {
     try {
-        const { data, error } = await supabase
+        let query: any = supabase
             .from('advertisements')
             .select('*')
             .eq('is_completed', true)
             .order('created_at', { ascending: false });
+
+        // allow caller to pass userId via optional property on function
+        // (we keep compatibility by checking arguments object)
+        const maybeUserId = (arguments as any)[0];
+        if (maybeUserId) query = query.eq('user_id', maybeUserId);
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching completed advertisements:', error);
@@ -51,13 +68,18 @@ export async function fetchCompletedAdvertisements() {
     }
 }
 
-export async function fetchIncompleteAdvertisements() {
+export async function fetchIncompleteAdvertisements(userId?: string) {
     try {
-        const { data, error } = await supabase
+        let query: any = supabase
             .from('advertisements')
             .select('*')
             .eq('is_completed', false)
             .order('created_at', { ascending: false });
+
+        const maybeUserId = (arguments as any)[0];
+        if (maybeUserId) query = query.eq('user_id', maybeUserId);
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching incomplete advertisements:', error);
@@ -71,9 +93,10 @@ export async function fetchIncompleteAdvertisements() {
     }
 }
 
-export async function fetchUnpublishedToVintedAdvertisements() {
+export async function fetchUnpublishedToVintedAdvertisements(userId?: string) {
     try {
-        const { data, error } = await supabase
+    console.log('[supabaseFetcher] fetchUnpublishedToVintedAdvertisements called with userId=', userId);
+        let query: any = supabase
             .from('advertisements')
             .select('*')
             .eq('is_published_to_vinted', false)
@@ -83,13 +106,27 @@ export async function fetchUnpublishedToVintedAdvertisements() {
             .not('stan', 'is', null)
             .order('created_at', { ascending: false });
 
+        if (userId) {
+            query = query.eq('user_id', userId);
+        }
+
+    const { data, error } = await query;
+
         if (error) {
             console.error('Error fetching unpublished advertisements:', error);
             return [];
         }
 
+        // Log a small sample of returned rows for debugging
+        try {
+            const sample = (data || []).slice(0, 5).map((d: any) => ({ id: d.id, user_id: d.user_id }));
+            console.log('[supabaseFetcher] fetchUnpublishedToVintedAdvertisements sample rows:', sample);
+        } catch (e) {
+            console.log('[supabaseFetcher] could not log sample rows for Vinted', e);
+        }
+
         // Additional filter for empty strings and ensure photos exist
-        const validAdvertisements = (data || []).filter(ad => {
+        const validAdvertisements = (data || []).filter((ad: any) => {
             const hasRequiredFields = ad.marka && ad.rodzaj && ad.rozmiar && ad.stan;
             const hasPhotos = ad.photo_uris && ad.photo_uris.length > 0;
             
@@ -114,9 +151,10 @@ export async function fetchUnpublishedToVintedAdvertisements() {
     }
 }
 
-export async function fetchUnpublishedToGrailedAdvertisements() {
+export async function fetchUnpublishedToGrailedAdvertisements(userId?: string) {
     try {
-        const { data, error } = await supabase
+    console.log('[supabaseFetcher] fetchUnpublishedToGrailedAdvertisements called with userId=', userId);
+        let query: any = supabase
             .from('advertisements')
             .select('*')
             .eq('is_published_to_grailed', false)
@@ -127,13 +165,27 @@ export async function fetchUnpublishedToGrailedAdvertisements() {
             .not('stan', 'is', null)
             .order('created_at', { ascending: false });
 
+        if (userId) {
+            query = query.eq('user_id', userId);
+        }
+
+    const { data, error } = await query;
+
         if (error) {
             console.error('Error fetching unpublished to Grailed advertisements:', error);
             return [];
         }
 
+        // Log a small sample of returned rows for debugging
+        try {
+            const sample = (data || []).slice(0, 5).map((d: any) => ({ id: d.id, user_id: d.user_id }));
+            console.log('[supabaseFetcher] fetchUnpublishedToGrailedAdvertisements sample rows:', sample);
+        } catch (e) {
+            console.log('[supabaseFetcher] could not log sample rows for Grailed', e);
+        }
+
         // Additional filter for empty strings and ensure photos exist
-        const validAdvertisements = (data || []).filter(ad => {
+        const validAdvertisements = (data || []).filter((ad: any) => {
             const hasRequiredFields = ad.marka && ad.rodzaj && ad.rozmiar && ad.stan;
             const hasPhotos = ad.photo_uris && ad.photo_uris.length > 0;
             
@@ -207,13 +259,19 @@ export async function fetchStyleByType(productType: string) {
     }
 }
 
-export async function fetchDescriptionHeaders() {
+export async function fetchDescriptionHeaders(platform?: string) {
     try {
-        const { data, error } = await supabase
+        let query: any = supabase
             .from('description_headers')
             .select('*')
             .eq('is_active', true)
             .order('order_index', { ascending: true });
+
+        if (platform) {
+            query = query.eq('platform', platform);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching description headers:', error);
@@ -224,6 +282,121 @@ export async function fetchDescriptionHeaders() {
     } catch (error) {
         console.error('Error in fetchDescriptionHeaders:', error);
         return [];
+    }
+}
+
+// Login via database RPC `login_user(p_username text, p_password text)`.
+// The function provided by the user returns a row with user id and message.
+export async function loginUser(username: string, password: string) {
+    try {
+        const { data, error } = await supabase.rpc('login_user', { p_username: username, p_password: password });
+
+        if (error) {
+            console.error('Error calling login_user RPC:', error);
+            return { success: false, message: error.message || 'RPC error', data: null };
+        }
+
+        // RPC may return an array or a single record depending on your Postgres function setup.
+        let result = Array.isArray(data) ? data[0] : data;
+
+        // Normalize different shapes:
+        // 1) object with named properties: { id, username, display_name, email, ... }
+        // 2) array positional: [ id, username, display_name, email, success_flag, message ]
+        // 3) nested array or unexpected shape
+
+        if (!result) {
+            console.warn('loginUser: RPC returned no data', { data });
+            return { success: false, message: 'No data from RPC', data: null };
+        }
+
+        // If it's an array (positional), map known indices
+        if (Array.isArray(result)) {
+            const [id, usernameRes, display_name, email, okFlag, message] = result;
+            const normalized = { id, username: usernameRes, display_name, email, ok: okFlag, message };
+            return { success: true, data: normalized };
+        }
+
+        // If it's an object but doesn't have `id`, it might have numeric keys or `?column?` keys
+        if (typeof result === 'object') {
+            // handle common Postgres anonymous column name '?column?'
+            if (!('id' in result)) {
+                const keys = Object.keys(result);
+                // try to pick sensible values from the first several columns
+                if (keys.length >= 1 && (keys[0] === '?column?' || keys[0].match(/^column\d*$/i))) {
+                    const vals = keys.map(k => (result as any)[k]);
+                    const [id, usernameRes, display_name, email, okFlag, message] = vals;
+                    const normalized = { id, username: usernameRes, display_name, email, ok: okFlag, message };
+                    return { success: true, data: normalized };
+                }
+            }
+
+            // If we have id property, return as-is (but ensure message field exists)
+            const normalizedObj: any = {
+                id: (result as any).id,
+                username: (result as any).username || (result as any).user_name || null,
+                display_name: (result as any).display_name || (result as any).displayname || null,
+                email: (result as any).email || null,
+                ok: (result as any).ok ?? (result as any).success ?? true,
+                message: (result as any).message || (result as any).msg || null,
+            };
+
+            return { success: true, data: normalizedObj };
+        }
+
+        // Fallback: unknown shape
+        console.warn('loginUser: unexpected RPC return shape', { data });
+        return { success: true, data: result };
+    } catch (err) {
+        console.error('Exception in loginUser:', err);
+        return { success: false, message: String(err), data: null };
+    }
+}
+
+// Helper: find a user's numeric id by username (used when RPC doesn't return id)
+export async function getUserIdByUsername(username: string) {
+    try {
+        if (!username) return null;
+        const { data, error } = await supabase
+            .from('users')
+            .select('id')
+            .eq('username', username)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching user id by username:', error);
+            return null;
+        }
+
+    const foundId = (data && (data as any).id) ? (data as any).id : null;
+    console.log(`getUserIdByUsername: looked up id for username='${username}' ->`, foundId);
+    return foundId;
+    } catch (err) {
+        console.error('Exception in getUserIdByUsername:', err);
+        return null;
+    }
+}
+
+// Helper: find username by user id
+export async function getUsernameById(userId: string) {
+    try {
+        if (!userId) return null;
+        const { data, error } = await supabase
+            .from('users')
+            .select('username')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching username by id:', error);
+            return null;
+        }
+
+        const username = (data && (data as any).username) ? (data as any).username : null;
+        console.log(`getUsernameById: looked up username for id='${userId}' ->`, username);
+        return username;
+    } catch (err) {
+        console.error('Exception in getUsernameById:', err);
+        return null;
     }
 }
 

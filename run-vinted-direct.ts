@@ -37,8 +37,9 @@ async function runDirectAutomation() {
         console.log('✅ Połączono z Chrome!');
         console.log('🚀 Rozpoczynam automatyzację Vinted...');
         
-        // Uruchom główną automatyzację
-        await automation.processAllAdvertisements();
+    // Uruchom główną automatyzację (opcjonalnie z userId z env)
+    const userId = process.env.USER_ID as string | undefined;
+    await automation.processAllAdvertisements(userId);
         
         console.log('✅ Automatyzacja zakończona pomyślnie!');
         

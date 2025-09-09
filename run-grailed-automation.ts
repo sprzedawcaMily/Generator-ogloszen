@@ -18,8 +18,10 @@ console.log('');
 console.log('▶️  Rozpoczynam automatyzację...');
 console.log('');
 
+// Run the automation (optionally scoped to USER_ID env)
+const userId = process.env.USER_ID as string | undefined;
 // Run the automation
-runGrailedAutomationWithExistingBrowser()
+runGrailedAutomationWithExistingBrowser(userId)
     .then(() => {
         console.log('✅ Automation finished successfully!');
     })

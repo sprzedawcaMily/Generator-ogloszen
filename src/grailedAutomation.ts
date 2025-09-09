@@ -1380,7 +1380,8 @@ export class GrailedAutomation {
             // Fetch styles and description headers
             const [styles, descriptionHeaders, specificStyle] = await Promise.all([
                 fetchStyles(),
-                fetchDescriptionHeaders(),
+                // Use platform-specific headers for Grailed
+                fetchDescriptionHeaders('grailed'),
                 fetchStyleByType(ad.typ)
             ]);
             
@@ -1394,16 +1395,74 @@ export class GrailedAutomation {
                 }
             }
             
-            // Product title with stars: 🌟 {brand} {type} {description_text} 🌟
-            description += '🌟 ';
-            if (ad.marka) description += ad.marka + ' ';
-            if (ad.rodzaj) description += ad.rodzaj + ' ';
-            
-            // Add description_text from style_templates based on product type
-            if (styleToUse && styleToUse.description_text) {
-                description += styleToUse.description_text + ' ';
-            }
-            description += '🌟\n\n';
+            // Product title with stars: use same English title generation as fillTitle()
+            const productTypeTranslations: { [key: string]: string } = {
+                'kurtka': 'jacket',
+                'Koszule w kratkę': 'checkered shirt',
+                'Koszule dżinsowe': 'denim shirt',
+                'Koszule gładkie': 'solid shirt',
+                'Koszulki z nadrukiem': 'printed t-shirt',
+                'Koszule w paski': 'striped shirt',
+                'T-shirty gładkie': 'solid t-shirt',
+                'T-shirty z nadrukiem': 'printed t-shirt',
+                'T-shirty w paski': 'striped t-shirt',
+                'Koszulki polo': 'polo shirt',
+                'Koszulki z długim rękawem': 'long sleeve shirt',
+                'Podkoszulki': 'undershirt',
+                'Bluzy': 'sweatshirt',
+                'Swetry i bluzy z kapturem': 'hoodie',
+                'Bluzy rozpinane': 'zip up sweatshirt',
+                'Kardigany': 'cardigan',
+                'Swetry z okrągłym dekoltem': 'crew neck sweater',
+                'Swetry w serek': 'v-neck sweater',
+                'Swetry z golfem': 'turtleneck sweater',
+                'Długie swetry': 'long sweater',
+                'Swetry z dzianiny': 'knit sweater',
+                'Kamizelki': 'vest',
+                'Spodnie z szerokimi nogawkami': 'wide leg pants',
+                'Szorty cargo': 'cargo shorts',
+                'Szorty chinosy': 'chino shorts',
+                'Szorty dżinsowe': 'denim shorts',
+                'Mokasyny, buty żeglarskie, loafersy': 'loafers',
+                'Chodaki i mule': 'clogs and mules',
+                'Espadryle': 'espadrilles',
+                'Klapki i japonki': 'flip flops',
+                'Obuwie wizytowe': 'dress shoes',
+                'Sandały': 'sandals',
+                'Kapcie': 'slippers',
+                'Obuwie sportowe': 'sneakers',
+                'Sneakersy, trampki i tenisówki': 'sneakers',
+                'Chusty i chustki': 'scarves',
+                'Paski': 'belts',
+                'Szelki': 'suspenders',
+                'Rękawiczki': 'gloves',
+                'Chusteczki': 'handkerchiefs',
+                'Kapelusze i czapki': 'hats and caps',
+                'Biżuteria': 'jewelry',
+                'Poszetki': 'pocket squares',
+                'Szaliki i szale': 'scarves',
+                'Okulary przeciwsłoneczne': 'sunglasses',
+                'Krawaty i muszki': 'ties and bow ties',
+                'Zegarki': 'watches',
+                'Plecaki': 'backpacks',
+                'Teczki': 'briefcases',
+                'Nerki': 'fanny packs',
+                'Pokrowce na ubrania': 'garment bags',
+                'Torby na siłownię': 'gym bags',
+                'Torby podróżne': 'travel bags',
+                'Walizki': 'suitcases',
+                'Listonoszki': 'messenger bags',
+                'Torby na ramię': 'shoulder bags',
+                'Portfele': 'wallets'
+            };
+
+            const englishProductType = productTypeTranslations[ad.rodzaj] || ad.rodzaj || 'item';
+            const brand = ad.marka || 'Brand';
+            const size = ad.rozmiar || '';
+            let englishTitle = `${brand} ${englishProductType}`;
+            if (size) englishTitle += ` size ${size}`;
+
+            description += '🌟 ' + englishTitle + ' 🌟\n\n';
             
             // Condition with emoji
             description += '📌 **Condition:** ';
@@ -1956,7 +2015,7 @@ export class GrailedAutomation {
         }
     }
 
-    async startWithExistingBrowser(): Promise<void> {
+    async startWithExistingBrowser(userId?: string): Promise<void> {
         try {
             console.log('🚀 Starting Grailed automation with existing browser...');
             console.log('🔍 Checking Chrome connection...');
@@ -1974,7 +2033,7 @@ export class GrailedAutomation {
             }
             
             // Start the automation process
-            await this.processGrailedListings();
+            await this.processGrailedListings(userId);
             
         } catch (error) {
             if (error instanceof Error && error.message === 'CHROME_NEEDS_LAUNCH') {
@@ -1985,7 +2044,7 @@ export class GrailedAutomation {
         }
     }
 
-    async processGrailedListings(): Promise<void> {
+    async processGrailedListings(userId?: string): Promise<void> {
         console.log('📋 Starting to process Grailed listings...');
         
         // Import supabase fetcher
@@ -1993,7 +2052,7 @@ export class GrailedAutomation {
         
         // Fetch unpublished advertisements
         console.log('📥 Fetching unpublished Grailed advertisements...');
-        const advertisements = await fetchUnpublishedToGrailedAdvertisements();
+    const advertisements = await fetchUnpublishedToGrailedAdvertisements(userId);
         
         if (!advertisements || advertisements.length === 0) {
             console.log('⚠️ No unpublished advertisements found for Grailed');
@@ -2272,11 +2331,11 @@ export class GrailedAutomation {
 }
 
 // Main automation functions
-export async function runGrailedAutomation() {
+export async function runGrailedAutomation(userId?: string) {
     const automation = new GrailedAutomation();
     
     try {
-        await automation.startWithExistingBrowser();
+        await automation.startWithExistingBrowser(userId);
     } catch (error) {
         console.error('Grailed automation failed:', error);
     } finally {
@@ -2285,11 +2344,11 @@ export async function runGrailedAutomation() {
 }
 
 // Function to run with existing browser
-export async function runGrailedAutomationWithExistingBrowser() {
+export async function runGrailedAutomationWithExistingBrowser(userId?: string) {
     const automation = new GrailedAutomation();
     
     try {
-        await automation.startWithExistingBrowser();
+        await automation.startWithExistingBrowser(userId);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         

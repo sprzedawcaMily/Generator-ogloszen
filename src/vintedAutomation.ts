@@ -151,7 +151,8 @@ export class VintedAutomation {
             // Pobierz style i nagłówki opisów
             const [styles, descriptionHeaders, specificStyle] = await Promise.all([
                 fetchStyles(),
-                fetchDescriptionHeaders(),
+                // Use platform-specific headers for Vinted
+                fetchDescriptionHeaders('vinted'),
                 fetchStyleByType(ad.typ)
             ]);
             
@@ -1198,7 +1199,7 @@ export class VintedAutomation {
         return false;
     }
 
-    async processAllAdvertisements() {
+    async processAllAdvertisements(userId?: string) {
         try {
             console.log('🚀 Starting to process all advertisements...');
             
@@ -1226,7 +1227,7 @@ export class VintedAutomation {
             
             // Pobierz ogłoszenia z bazy danych - tylko nieopublikowane do Vinted
             console.log('📥 Fetching unpublished advertisements from database...');
-            const advertisements = await fetchUnpublishedToVintedAdvertisements();
+            const advertisements = await fetchUnpublishedToVintedAdvertisements(userId);
             
             if (advertisements.length === 0) {
                 console.log('❌ No unpublished advertisements found in database');
@@ -3724,7 +3725,7 @@ export class VintedAutomation {
         await new Promise(resolve => setTimeout(resolve, timeoutSeconds * 1000));
     }
 
-    async startWithExistingBrowser() {
+    async startWithExistingBrowser(userId?: string) {
         try {
             console.log('🚀 Starting Vinted automation with existing browser...');
             console.log('🔍 Sprawdzanie połączenia z Chrome...');
@@ -3780,7 +3781,7 @@ export class VintedAutomation {
             
             // Pobierz ogłoszenia z bazy danych - tylko nieopublikowane do Vinted
             console.log('📥 Fetching unpublished advertisements from database...');
-            const advertisements = await fetchUnpublishedToVintedAdvertisements();
+            const advertisements = await fetchUnpublishedToVintedAdvertisements(userId);
             
             if (advertisements.length === 0) {
                 console.log('❌ No unpublished advertisements found in database');
@@ -3849,7 +3850,7 @@ export class VintedAutomation {
         }
     }
 
-    async start() {
+    async start(userId?: string) {
         try {
             console.log('🚀 Starting Vinted automation...');
             
@@ -3860,7 +3861,7 @@ export class VintedAutomation {
             await this.navigateToVinted();
             
             // Uruchom przetwarzanie wszystkich ogłoszeń
-            await this.processAllAdvertisements();
+            await this.processAllAdvertisements(userId);
             
         } catch (error) {
             console.error('❌ Error in Vinted automation:', error);
@@ -3891,11 +3892,11 @@ export class VintedAutomation {
 }
 
 // Funkcja główna do uruchomienia automatyzacji
-export async function runVintedAutomation() {
+export async function runVintedAutomation(userId?: string) {
     const automation = new VintedAutomation();
     
     try {
-        await automation.start();
+        await automation.start(userId);
     } catch (error) {
         console.error('Vinted automation failed:', error);
     } finally {
@@ -3904,11 +3905,11 @@ export async function runVintedAutomation() {
 }
 
 // Funkcja do uruchomienia z istniejącą przeglądarką
-export async function runVintedAutomationWithExistingBrowser() {
+export async function runVintedAutomationWithExistingBrowser(userId?: string) {
     const automation = new VintedAutomation();
     
     try {
-        await automation.startWithExistingBrowser();
+        await automation.startWithExistingBrowser(userId);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         

@@ -208,6 +208,15 @@ body {
     background: linear-gradient(135deg, #10b981 0%, #047857 100%);
 }
 
+/* English copy buttons: visually match main buttons but keep clear intent */
+.copy-title-en-btn {
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+}
+
+.copy-desc-en-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
 .copy-photos-btn {
     background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
 }
@@ -249,6 +258,58 @@ body {
 
 .copy-btn:active {
     transform: translateY(0);
+}
+
+/* Disabled / secondary appearance for buttons (also applies when adding .disabled class) */
+.copy-btn[disabled], .copy-btn.disabled {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+    cursor: not-allowed !important;
+}
+
+/* keep button sizes consistent */
+.copy-btn.copy-title-en-btn, .copy-btn.copy-desc-en-btn {
+    min-height: 48px;
+    padding: 12px 16px;
+}
+
+/* Grailed status button styling */
+.grailed-status-btn {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #11182722; /* subtle outline */
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.grailed-status-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.06);
+}
+
+.grailed-status-btn.published {
+    background: #ffffff; /* keep white */
+    color: #0b1220;
+    border: 2px solid #0b1220; /* stronger dark border when published */
+    box-shadow: none;
+}
+
+.grailed-status-btn[disabled], .grailed-status-btn.disabled {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
+    border: 1px solid #e5e7eb !important;
+    cursor: not-allowed !important;
 }
 
 .full-description {

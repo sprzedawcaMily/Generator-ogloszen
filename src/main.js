@@ -245,6 +245,21 @@ async function createAdvertisementCard(ad, index, styles) {
     copyTitleButton.onclick = () => copyAdvertisementTitle(ad, styles);
     buttonContainer.appendChild(copyTitleButton);
     
+    // Copy English title button
+    const copyEnglishTitleBtn = document.createElement('button');
+    copyEnglishTitleBtn.textContent = 'Kopiuj tytuł (EN)';
+    copyEnglishTitleBtn.className = 'copy-btn copy-title-en-btn';
+    copyEnglishTitleBtn.onclick = async () => {
+        const eng = await generateEnglishTitle(ad);
+        if (eng) {
+            await navigator.clipboard.writeText(eng);
+            showMessage('✅ Skopiowano tytuł (EN)');
+        } else {
+            showMessage('❌ Nie udało się wygenerować tytułu (EN)');
+        }
+    };
+    buttonContainer.appendChild(copyEnglishTitleBtn);
+    
     // Download photos button
     const downloadPhotosButton = document.createElement('button');
     downloadPhotosButton.textContent = 'Pobierz zdjęcia';
@@ -259,6 +274,31 @@ async function createAdvertisementCard(ad, index, styles) {
     copyDescButton.onclick = () => copyAdvertisementToClipboard(ad);
     buttonContainer.appendChild(copyDescButton);
 
+    // Copy English description button
+    const copyEnglishDescBtn = document.createElement('button');
+    copyEnglishDescBtn.textContent = 'Kopiuj opis (EN)';
+    copyEnglishDescBtn.className = 'copy-btn copy-desc-en-btn';
+    copyEnglishDescBtn.onclick = async () => {
+        try {
+            // Fetch styles and grailed-specific description header
+            const specificStyle = await fetchStyleByType(ad.typ);
+            const stylesToUse = specificStyle ? [specificStyle] : (window._cachedStyles || []);
+            const headersResp = await fetch(`/api/description-headers?platform=grailed`);
+            const headers = headersResp.ok ? await headersResp.json() : [];
+            const engDesc = await generateEnglishDescription(ad, stylesToUse, headers);
+            if (engDesc) {
+                await navigator.clipboard.writeText(engDesc);
+                showMessage('✅ Skopiowano opis (EN)');
+            } else {
+                showMessage('❌ Nie udało się wygenerować opisu (EN)');
+            }
+        } catch (error) {
+            console.error('Error generating English description:', error);
+            showMessage('❌ Błąd podczas generowania opisu (EN)');
+        }
+    };
+    buttonContainer.appendChild(copyEnglishDescBtn);
+
     // Vinted status button
     const vintedStatusButton = document.createElement('button');
     vintedStatusButton.className = `vinted-status-btn ${ad.is_published_to_vinted ? 'published' : ''}`;
@@ -266,9 +306,50 @@ async function createAdvertisementCard(ad, index, styles) {
     vintedStatusButton.onclick = () => toggleVintedStatus(ad.id, vintedStatusButton, card);
     buttonContainer.appendChild(vintedStatusButton);
     
+    // Grailed status button
+    const grailedStatusButton = document.createElement('button');
+    grailedStatusButton.className = `grailed-status-btn ${ad.is_published_to_grailed ? 'published' : ''}`;
+    grailedStatusButton.textContent = ad.is_published_to_grailed ? '✓ Opublikowane (Grailed)' : '⊕ Nie opublikowane (Grailed)';
+    grailedStatusButton.onclick = () => toggleGrailedStatus(ad.id, grailedStatusButton, card);
+    buttonContainer.appendChild(grailedStatusButton);
+    
     card.appendChild(buttonContainer);
 
     return card;
+}
+
+// Toggle Grailed publication status
+async function toggleGrailedStatus(advertisementId, button, card) {
+    try {
+        showMessage('🔄 Aktualizuję status Grailed...');
+
+        const response = await fetch('/api/grailed/toggle-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ advertisementId })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            if (result.is_published_to_grailed) {
+                button.textContent = '✓ Opublikowane (Grailed)';
+                button.className = 'grailed-status-btn published';
+                showMessage('✅ Oznaczono jako opublikowane na Grailed');
+            } else {
+                button.textContent = '⊕ Nie opublikowane (Grailed)';
+                button.className = 'grailed-status-btn';
+                showMessage('✅ Oznaczono jako nieopublikowane na Grailed');
+            }
+        } else {
+            showMessage('❌ Błąd: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error toggling Grailed status:', error);
+        showMessage('❌ Błąd zmiany statusu: ' + error.message);
+    }
 }
 
 // Function to run Vinted automation
@@ -375,6 +456,130 @@ async function generateAdvertisementDescription(ad, styles, descriptionHeaders) 
     }
     
     return description;
+}
+
+// Generate English title similar to GrailedAutomation.fillTitle
+async function generateEnglishTitle(ad) {
+    try {
+        const productTypeTranslations = {
+            'kurtka': 'jacket',
+            'Koszule w kratkę': 'checkered shirt',
+            'Koszule dżinsowe': 'denim shirt',
+            'Koszule gładkie': 'solid shirt',
+            'Koszulki z nadrukiem': 'printed t-shirt',
+            'Koszule w paski': 'striped shirt',
+            'T-shirty gładkie': 'solid t-shirt',
+            'T-shirty z nadrukiem': 'printed t-shirt',
+            'T-shirty w paski': 'striped t-shirt',
+            'Koszulki polo': 'polo shirt',
+            'Koszulki z długim rękawem': 'long sleeve shirt',
+            'Podkoszulki': 'undershirt',
+            'Bluzy': 'sweatshirt',
+            'Swetry i bluzy z kapturem': 'hoodie',
+            'Bluzy rozpinane': 'zip up sweatshirt',
+            'Kardigany': 'cardigan',
+            'Swetry z okrągłym dekoltem': 'crew neck sweater',
+            'Swetry w serek': 'v-neck sweater',
+            'Swetry z golfem': 'turtleneck sweater',
+            'Długie swetry': 'long sweater',
+            'Swetry z dzianiny': 'knit sweater',
+            'Kamizelki': 'vest',
+            'Spodnie z szerokimi nogawkami': 'wide leg pants',
+            'Szorty cargo': 'cargo shorts',
+            'Szorty chinosy': 'chino shorts',
+            'Szorty dżinsowe': 'denim shorts',
+            'Mokasyny, buty żeglarskie, loafersy': 'loafers',
+            'Chodaki i mule': 'clogs and mules',
+            'Espadryle': 'espadrilles',
+            'Klapki i japonki': 'flip flops',
+            'Obuwie wizytowe': 'dress shoes',
+            'Sandały': 'sandals',
+            'Kapcie': 'slippers',
+            'Obuwie sportowe': 'sneakers',
+            'Sneakersy, trampki i tenisówki': 'sneakers',
+            'Chusty i chustki': 'scarves',
+            'Paski': 'belts',
+            'Szelki': 'suspenders',
+            'Rękawiczki': 'gloves',
+            'Chusteczki': 'handkerchiefs',
+            'Kapelusze i czapki': 'hats and caps',
+            'Biżuteria': 'jewelry',
+            'Poszetki': 'pocket squares',
+            'Szaliki i szale': 'scarves',
+            'Okulary przeciwsłoneczne': 'sunglasses',
+            'Krawaty i muszki': 'ties and bow ties',
+            'Zegarki': 'watches',
+            'Plecaki': 'backpacks',
+            'Teczki': 'briefcases',
+            'Nerki': 'fanny packs',
+            'Pokrowce na ubrania': 'garment bags',
+            'Torby na siłownię': 'gym bags',
+            'Torby podróżne': 'travel bags',
+            'Walizki': 'suitcases',
+            'Listonoszki': 'messenger bags',
+            'Torby na ramię': 'shoulder bags',
+            'Portfele': 'wallets'
+        };
+
+        const englishProductType = productTypeTranslations[ad.rodzaj] || ad.rodzaj || 'item';
+        const brand = ad.marka || 'Brand';
+        const size = ad.rozmiar || '';
+
+        let title = `${brand} ${englishProductType}`;
+        if (size) title += ` size ${size}`;
+        return title.trim();
+    } catch (error) {
+        console.error('Error generating English title:', error);
+        return '';
+    }
+}
+
+// Generate English description similar to GrailedAutomation.generateDescription
+async function generateEnglishDescription(ad, styles, descriptionHeaders) {
+    try {
+        let description = '';
+        const styleToUse = (styles && styles.length > 0) ? styles[0] : null;
+
+        if (descriptionHeaders && descriptionHeaders.length > 0) {
+            const header = descriptionHeaders[0];
+            if (header.title) description += `${header.title}\n\n`;
+        }
+
+    // Title part - use the same generated English title so description matches the title
+    const engTitle = await generateEnglishTitle(ad);
+    description += '🌟 ' + (engTitle || '') + ' 🌟\n\n';
+
+        // Condition
+        description += '📌 **Condition:** ';
+        if (ad.stan) {
+            description += ad.stan;
+            if (ad.wada && ad.wada.trim() !== '') description += ` / ${ad.wada}`;
+            else description += ' / No flaws';
+        } else {
+            description += 'No flaws';
+        }
+        description += '\n';
+
+        if (ad.rozmiar) description += `📏 **Size:** ${ad.rozmiar}\n`;
+        if (ad.color) description += `🎨 **Color:** ${ad.color}\n`;
+
+        const hasMeasurements = ad.pas || ad.dlugosc || ad.szerokosc || ad.udo || ad.dlugosc_nogawki;
+        if (hasMeasurements) {
+            description += '📐 **Measurements:**\n';
+            if (ad.pas) description += `Waist ${ad.pas} cm\n`;
+            if (ad.dlugosc) description += `Length ${ad.dlugosc} cm\n`;
+            if (ad.szerokosc) description += `Width ${ad.szerokosc} cm\n`;
+            if (ad.udo) description += `Thigh ${ad.udo} cm\n`;
+            if (ad.dlugosc_nogawki) description += `Inseam ${ad.dlugosc_nogawki} cm\n`;
+        }
+
+        if (styleToUse && styleToUse.footer_text) description += `${styleToUse.footer_text}`;
+
+        return description;
+    } catch (error) {
+        console.error('Error generating English description:', error);
+        return '';
+    }
 }
 
 // Copy advertisement title to clipboard
@@ -501,12 +706,33 @@ async function init() {
         updateDebug('Nie znaleziono kontenera itemsContainer');
         return;
     }
+    // Ensure auth container exists
+    const authContainer = document.getElementById('authContainer');
+    if (!authContainer) {
+        updateDebug('Nie znaleziono kontenera authContainer');
+        return;
+    }
     
     try {
-        // Show loading state
-        container.innerHTML = '<div class="loading">Ładowanie danych z Supabase...</div>';
+        // Check login state first
+        container.innerHTML = '';
+        authContainer.innerHTML = '';
+        const meResp = await fetch('http://localhost:3001/api/me');
+        let me = null;
+        try { me = await meResp.json(); } catch (e) { me = null; }
+
+        // If not logged in, render login form and stop here (login will call init again)
+        if (!me || !me.userId) {
+            renderAuthBar(authContainer, null);
+            return;
+        }
+
+    // Show auth bar with username (if known) and loading state
+    const storedUsername = (() => { try { return localStorage.getItem('app_username'); } catch (e) { return null; } })();
+    renderAuthBar(authContainer, storedUsername);
+    container.innerHTML = '<div class="loading">Ładowanie danych z Supabase...</div>';
         
-        // Fetch data from Supabase
+        // Fetch data from Supabase (server will scope by cookie)
         const data = await fetchSupabaseData();
         
         updateDebug(`Pobrano ${data.advertisements.length} reklam, ${data.styles.length} stylów`);
@@ -606,6 +832,161 @@ async function init() {
         updateDebug(`Błąd podczas inicjalizacji: ${error.message}`);
         container.innerHTML = '<div class="error">Wystąpił błąd podczas ładowania danych</div>';
     }
+}
+
+// Render an auth bar: if username provided, show greeting + logout; otherwise show compact login form
+function renderAuthBar(container, username) {
+    container.innerHTML = '';
+    const bar = document.createElement('div');
+    bar.className = 'auth-bar';
+
+    if (username) {
+        const left = document.createElement('div');
+        left.innerHTML = `<span class="auth-username">Zalogowany: ${escapeHtml(username)}</span>`;
+        bar.appendChild(left);
+
+        const right = document.createElement('div');
+        const logoutBtn = document.createElement('button');
+        logoutBtn.className = 'auth-btn logout';
+        logoutBtn.textContent = 'Wyloguj';
+        logoutBtn.onclick = async () => {
+            await fetch('http://localhost:3001/api/logout', { method: 'POST' });
+            try { localStorage.removeItem('app_username'); } catch (e) {}
+            init();
+        };
+        right.appendChild(logoutBtn);
+        bar.appendChild(right);
+    } else {
+        // compact login form
+        const form = document.createElement('form');
+        form.style.cssText = 'display:flex; gap:8px; align-items:center;';
+
+        const usernameInput = document.createElement('input');
+        usernameInput.placeholder = 'username';
+        usernameInput.name = 'username';
+        usernameInput.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
+
+        const passwordInput = document.createElement('input');
+        passwordInput.type = 'password';
+        passwordInput.placeholder = 'password';
+        passwordInput.name = 'password';
+        passwordInput.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
+
+        const submit = document.createElement('button');
+        submit.type = 'submit';
+        submit.textContent = 'Zaloguj';
+        submit.className = 'auth-btn login';
+
+        form.appendChild(usernameInput);
+        form.appendChild(passwordInput);
+        form.appendChild(submit);
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            submit.disabled = true;
+            const u = usernameInput.value.trim();
+            const p = passwordInput.value;
+            try {
+                const resp = await fetch('http://localhost:3001/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const json = await resp.json();
+                if (json && json.success) {
+                    try { localStorage.setItem('app_username', u); } catch (e) {}
+                    showMessage('Zalogowano');
+                    init();
+                } else {
+                    showMessage('Błąd logowania: ' + (json && json.message ? json.message : 'nieznany'));
+                }
+            } catch (err) {
+                showMessage('Błąd sieci: ' + err.message);
+            } finally {
+                submit.disabled = false;
+            }
+        });
+
+        bar.appendChild(form);
+    }
+
+    container.appendChild(bar);
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, function (m) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m];
+    });
+}
+
+// Floating logout button helper
+
+
+// Render a simple login form inside the auth container
+function renderLoginForm(container) {
+    container.innerHTML = '';
+    const form = document.createElement('form');
+    form.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:12px;';
+
+    const username = document.createElement('input');
+    username.placeholder = 'username';
+    username.name = 'username';
+    username.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
+
+    const password = document.createElement('input');
+    password.type = 'password';
+    password.placeholder = 'password';
+    password.name = 'password';
+    password.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
+
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'Zaloguj';
+    submit.style.cssText = 'padding:8px 12px; border-radius:6px; background:#2563eb; color:white; border:none; cursor:pointer;';
+
+    const logoutBtn = document.createElement('button');
+    logoutBtn.type = 'button';
+    logoutBtn.textContent = 'Wyloguj';
+    logoutBtn.style.cssText = 'padding:8px 12px; border-radius:6px; background:#ef4444; color:white; border:none; cursor:pointer; margin-left:8px; display:none;';
+    logoutBtn.onclick = async () => {
+        await fetch('http://localhost:3001/api/logout', { method: 'POST' });
+        // Re-init to show login
+        init();
+    };
+
+    form.appendChild(username);
+    form.appendChild(password);
+    form.appendChild(submit);
+    form.appendChild(logoutBtn);
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        submit.disabled = true;
+        const u = username.value.trim();
+        const p = password.value;
+        try {
+            const resp = await fetch('http://localhost:3001/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            });
+            const json = await resp.json();
+            if (json && json.success) {
+                showMessage('Zalogowano');
+                // Re-init to load user-specific ads
+                init();
+            } else {
+                showMessage('Błąd logowania: ' + (json && json.message ? json.message : 'nieznany'));
+            }
+        } catch (err) {
+            showMessage('Błąd sieci: ' + err.message);
+        } finally {
+            submit.disabled = false;
+        }
+    });
+
+    container.appendChild(form);
 }
 
 // Function to launch Chrome for login
