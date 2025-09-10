@@ -130,6 +130,25 @@ async function fetchSupabaseData() {
     }
 }
 
+// Fetch cached exchange rate from server and apply to local config
+async function fetchExchangeRate() {
+    try {
+        const resp = await fetch('/api/exchange-rate');
+        if (!resp.ok) return null;
+        const json = await resp.json();
+        if (json && json.rate) {
+            // override client-side constant
+            if (typeof window !== 'undefined') {
+                window.GRAILED_PLN_TO_USD_RATE = Number(json.rate);
+            }
+            return json;
+        }
+    } catch (e) {
+        console.warn('Failed to fetch exchange rate:', e);
+    }
+    return null;
+}
+
 // Create a product card from advertisement data
 async function createAdvertisementCard(ad, index, styles) {
     const card = document.createElement('div');
@@ -273,6 +292,63 @@ async function createAdvertisementCard(ad, index, styles) {
     copyDescButton.className = 'copy-btn copy-desc-btn';
     copyDescButton.onclick = () => copyAdvertisementToClipboard(ad);
     buttonContainer.appendChild(copyDescButton);
+
+    // Copy Vinted price button
+    const copyVintedPriceBtn = document.createElement('button');
+    copyVintedPriceBtn.textContent = 'Kopiuj cenę (Vinted)';
+    copyVintedPriceBtn.className = 'copy-btn copy-price-vinted-btn';
+    copyVintedPriceBtn.onclick = () => copyVintedPrice(ad);
+    buttonContainer.appendChild(copyVintedPriceBtn);
+
+    // Copy Grailed price button
+    const copyGrailedPriceBtn = document.createElement('button');
+    copyGrailedPriceBtn.textContent = 'Kopiuj cenę (Grailed)';
+    copyGrailedPriceBtn.className = 'copy-btn copy-price-grailed-btn';
+    copyGrailedPriceBtn.onclick = () => copyGrailedPrice(ad);
+    buttonContainer.appendChild(copyGrailedPriceBtn);
+
+// Copy Vinted price to clipboard
+function copyVintedPrice(ad) {
+    // If you have ad.price_vinted, use it; else fallback to ad.price
+    const price = ad.price_vinted || ad.price || '';
+    if (price) {
+        navigator.clipboard.writeText(price.toString());
+        showMessage('✅ Skopiowano cenę (Vinted)');
+    } else {
+        showMessage('❌ Brak ceny do skopiowania (Vinted)');
+    }
+}
+
+// Copy Grailed price to clipboard
+function copyGrailedPrice(ad) {
+    // Base price in PLN (prefer platform-specific field)
+    const basePLN = parseFloat(ad.price_grailed || ad.price || 0);
+    if (!basePLN || isNaN(basePLN)) {
+        showMessage('❌ Brak ceny do skopiowania (Grailed)');
+        return;
+    }
+    // Prefer server-provided cached rate if available on window, else use default constant
+    const localRate = Number((window.GRAILED_PLN_TO_USD_RATE !== undefined && window.GRAILED_PLN_TO_USD_RATE !== null)
+        ? window.GRAILED_PLN_TO_USD_RATE
+        : GRAILED_PLN_TO_USD_RATE) || GRAILED_PLN_TO_USD_RATE;
+
+    // Ensure percentage is numeric
+    const pct = Number(GRAILED_PRICE_PERCENTAGE) || 0;
+
+    // Convert PLN -> USD (round to nearest integer USD)
+    const usd = Math.round(basePLN * localRate);
+
+    // Apply percentage markup
+    const finalUsd = Math.round(usd * (1 + (pct / 100)));
+
+    const out = `$${finalUsd}`;
+    try {
+        navigator.clipboard.writeText(out);
+        showMessage(`✅ Skopiowano cenę (Grailed): ${out}`);
+    } catch (err) {
+        showMessage(`❌ Błąd kopiowania ceny: ${err && err.message ? err.message : err}`);
+    }
+}
 
     // Copy English description button
     const copyEnglishDescBtn = document.createElement('button');
@@ -534,6 +610,10 @@ async function generateEnglishTitle(ad) {
     }
 }
 
+// Grailed price conversion config
+const GRAILED_PLN_TO_USD_RATE = 0.25; // 1 PLN = 0.25 USD (approximate)
+let GRAILED_PRICE_PERCENTAGE = 15; // percent markup to add for Grailed (editable)
+
 // Generate English description similar to GrailedAutomation.generateDescription
 async function generateEnglishDescription(ad, styles, descriptionHeaders) {
     try {
@@ -726,6 +806,9 @@ async function init() {
             renderAuthBar(authContainer, null);
             return;
         }
+
+    // Fetch exchange rate (server caches it at startup)
+    try { await fetchExchangeRate(); } catch (e) { /* ignore */ }
 
     // Show auth bar with username (if known) and loading state
     const storedUsername = (() => { try { return localStorage.getItem('app_username'); } catch (e) { return null; } })();

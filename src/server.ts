@@ -3,6 +3,27 @@ import { fetchAdvertisements, fetchCompletedAdvertisements, fetchIncompleteAdver
 
 const DEFAULT_PORT = Number(process.env.PORT) || 3001;
 
+// Cached exchange rate (PLN -> USD). Default fallback used until fetched.
+let cachedPlnToUsdRate = 0.25;
+let exchangeRateFetchedAt: number | null = null;
+
+async function fetchAndCacheExchangeRateOnce() {
+    try {
+        // Use exchangerate.host for free exchange rates
+        const res = await fetch('https://api.exchangerate.host/latest?base=PLN&symbols=USD');
+        if (!res.ok) throw new Error('Failed to fetch exchange rate');
+        const json = await res.json();
+        const rate = json?.rates?.USD;
+        if (rate && typeof rate === 'number') {
+            cachedPlnToUsdRate = Number(rate);
+            exchangeRateFetchedAt = Date.now();
+            console.log(`[exchange-rate] fetched PLN->USD rate: ${cachedPlnToUsdRate}`);
+        }
+    } catch (err) {
+        console.warn('[exchange-rate] could not fetch live rate, using fallback', err);
+    }
+}
+
 async function handleFetch(req: Request) {
     const url = new URL(req.url);
     console.log(`Otrzymano żądanie: ${url.pathname}`);
@@ -476,6 +497,13 @@ async function handleFetch(req: Request) {
             });
         }
 
+        // Endpoint zwracający składowany kurs PLN->USD
+        if (url.pathname === '/api/exchange-rate') {
+            return new Response(JSON.stringify({ rate: cachedPlnToUsdRate, fetchedAt: exchangeRateFetchedAt }), {
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
         // ============= GRAILED AUTOMATION ENDPOINTS =============
         
         // Endpoint uruchomienia Chrome dla Grailed
@@ -608,6 +636,8 @@ async function handleFetch(req: Request) {
 let server: any = null;
 let port = DEFAULT_PORT;
 const maxAttempts = 10;
+// Fetch exchange rate once at startup (best-effort)
+fetchAndCacheExchangeRateOnce().catch(err => console.warn('exchange-rate startup fetch failed', err));
 for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
         server = serve({ port, fetch: handleFetch });

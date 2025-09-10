@@ -1742,9 +1742,24 @@ export class GrailedAutomation {
         console.log(`============================\n`);
         
         try {
-            // Convert PLN to USD (approximate rate: 1 USD = 4 PLN)
-            const PLN_TO_USD_RATE = 0.25; // 1 PLN = 0.25 USD (approximate)
-            
+            // Try to obtain PLN->USD rate from local server (cached); fall back to default
+            let PLN_TO_USD_RATE = 0.25; // default fallback
+            try {
+                const resp = await fetch('http://localhost:3001/api/exchange-rate');
+                if (resp.ok) {
+                    const json = await resp.json();
+                    if (json && typeof json.rate === 'number') {
+                        PLN_TO_USD_RATE = Number(json.rate) || PLN_TO_USD_RATE;
+                        console.log(`[exchange-rate] using cached PLN->USD rate: ${PLN_TO_USD_RATE}`);
+                    }
+                }
+            } catch (e) {
+                console.log('[exchange-rate] could not fetch rate from server, using default', e);
+            }
+
+            // Percentage markup (can be configured via env var GRAILED_PRICE_PERCENTAGE)
+            const GRAILED_PRICE_PERCENTAGE = Number(process.env.GRAILED_PRICE_PERCENTAGE) || 15;
+
             let priceInPLN = 0;
             if (ad.price) {
                 // Extract number from price string
@@ -1759,9 +1774,13 @@ export class GrailedAutomation {
                 console.log('⚠️ No price specified, using default: 50 PLN');
             }
             
-            // Convert to USD
+            // Convert to USD (round to nearest USD)
             const priceInUSD = Math.round(priceInPLN * PLN_TO_USD_RATE);
-            console.log(`🔄 Converted: ${priceInPLN} PLN → ${priceInUSD} USD`);
+            console.log(`🔄 Converted: ${priceInPLN} PLN → ${priceInUSD} USD (rate ${PLN_TO_USD_RATE})`);
+
+            // Apply configured markup so Grailed price is higher (e.g., 15%)
+            const finalUsd = Math.round(priceInUSD * (1 + (GRAILED_PRICE_PERCENTAGE / 100)));
+            console.log(`📈 Applying markup ${GRAILED_PRICE_PERCENTAGE}% → final: $${finalUsd} USD`);
             
             // Find and fill the price input field
             const priceInput = 'input[name="price"]';
@@ -1772,13 +1791,13 @@ export class GrailedAutomation {
             await this.page.keyboard.down('Control');
             await this.page.keyboard.press('a');
             await this.page.keyboard.up('Control');
-            await this.page.type(priceInput, priceInUSD.toString());
+            await this.page.type(priceInput, finalUsd.toString());
             
-            console.log(`✅ Price filled: $${priceInUSD} USD`);
+            console.log(`✅ Price filled: $${finalUsd} USD`);
             
             // Fill Floor Price (25% reduction)
-            const floorPrice = Math.round(priceInUSD * 0.75); // 25% reduction
-            console.log(`🔄 Floor price (75% of original): $${floorPrice} USD`);
+            const floorPrice = Math.round(finalUsd * 0.75); // 25% reduction of final price
+            console.log(`🔄 Floor price (75% of final): $${floorPrice} USD`);
             
             try {
                 const floorPriceInput = 'input[name="smartPricing.minimumPrice"]';

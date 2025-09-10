@@ -225,6 +225,15 @@ body {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
 }
 
+.copy-price-vinted-btn {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+
+.copy-price-grailed-btn {
+    background: linear-gradient(135deg, #f59e42 0%, #fbbf24 100%);
+    color: #1f2937;
+}
+
 .vinted-status-btn {
     background: linear-gradient(135deg, #10b981 0%, #047857 100%);
     color: white;
