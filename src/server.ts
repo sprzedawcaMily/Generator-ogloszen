@@ -504,6 +504,75 @@ async function handleFetch(req: Request) {
             });
         }
 
+        // ============= DASHBOARD API ENDPOINTS =============
+        
+        // Status aplikacji
+        if (url.pathname === '/api/status') {
+            const { Logger } = await import('./logger');
+            const logger = Logger.getInstance();
+            
+            return new Response(JSON.stringify({
+                status: 'running',
+                timestamp: new Date().toISOString(),
+                uptime: process.uptime(),
+                memory: process.memoryUsage(),
+                version: '1.0.0'
+            }), {
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
+        // Statystyki automatyzacji
+        if (url.pathname === '/api/stats') {
+            const { Logger } = await import('./logger');
+            const logger = Logger.getInstance();
+            const stats = logger.getLogStats();
+            
+            return new Response(JSON.stringify({
+                logs: stats,
+                uptime: process.uptime(),
+                memory: process.memoryUsage(),
+                timestamp: new Date().toISOString()
+            }), {
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
+        // Logi z poziomu
+        if (url.pathname === '/api/logs') {
+            const level = url.searchParams.get('level');
+            const limit = parseInt(url.searchParams.get('limit') || '100');
+            
+            const { Logger } = await import('./logger');
+            const logger = Logger.getInstance();
+            
+            let logs;
+            if (level) {
+                logs = logger.getLogsByLevel(level);
+            } else {
+                logs = logger.getRecentLogs(limit);
+            }
+            
+            return new Response(JSON.stringify({ logs }), {
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
+        // Lista wszystkich ogłoszeń
+        if (url.pathname === '/api/advertisements') {
+            const { Logger } = await import('./logger');
+            const logger = Logger.getInstance();
+            
+            // Pobierz logi związane z ogłoszeniami
+            const advertisementLogs = logger.getRecentLogs(500).filter(log => 
+                log.message.includes('Advertisement') || log.message.includes('Ogłoszenie')
+            );
+            
+            return new Response(JSON.stringify({ advertisements: advertisementLogs }), {
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
         // ============= GRAILED AUTOMATION ENDPOINTS =============
         
         // Endpoint uruchomienia Chrome dla Grailed
@@ -628,8 +697,53 @@ async function handleFetch(req: Request) {
         return new Response(file, { headers });
     } catch (error) {
         console.error(`Error serving ${url.pathname}:`, error);
+        }
+
+        // ============= DASHBOARD FRONTEND =============
+        
+        // Serwowanie dashboard.html
+        if (url.pathname === '/dashboard' || url.pathname === '/dashboard.html') {
+            try {
+                const { promises: fs } = await import('fs');
+                const path = await import('path');
+                
+                const dashboardPath = path.join(process.cwd(), 'dashboard.html');
+                const dashboardContent = await fs.readFile(dashboardPath, 'utf-8');
+                
+                return new Response(dashboardContent, {
+                    headers: { 'Content-Type': 'text/html', 'Access-Control-Allow-Origin': '*' }
+                });
+            } catch (error) {
+                return new Response('Dashboard not found', { 
+                    status: 404,
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+            }
+        }
+
+        // ============= DASHBOARD FRONTEND =============
+        
+        // Serwowanie dashboard.html
+        if (url.pathname === '/dashboard' || url.pathname === '/dashboard.html') {
+            try {
+                const { promises: fs } = await import('fs');
+                const path = await import('path');
+                
+                const dashboardPath = path.join(process.cwd(), 'dashboard.html');
+                const dashboardContent = await fs.readFile(dashboardPath, 'utf-8');
+                
+                return new Response(dashboardContent, {
+                    headers: { 'Content-Type': 'text/html', 'Access-Control-Allow-Origin': '*' }
+                });
+            } catch (error) {
+                return new Response('Dashboard not found', { 
+                    status: 404,
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+            }
+        }
+
         return new Response("404 Not Found", { status: 404 });
-    }
 }
 
 // Try to start server on DEFAULT_PORT, retrying with higher ports if occupied
@@ -659,4 +773,10 @@ if (!server) {
     process.exit(1);
 }
 
-console.log(`Serwer uruchomiony na http://localhost:${port}`);
+// Beautiful server startup message
+const { Logger } = await import('./logger');
+const logger = Logger.getInstance();
+
+await logger.banner('APLIKACJA DO WSTAWIANIA OGŁOSZEŃ');
+await logger.success(`Main App: http://localhost:${port}`);
+await logger.separator();

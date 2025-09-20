@@ -924,40 +924,45 @@ function renderAuthBar(container, username) {
     bar.className = 'auth-bar';
 
     if (username) {
-        const left = document.createElement('div');
-        left.innerHTML = `<span class="auth-username">Zalogowany: ${escapeHtml(username)}</span>`;
-        bar.appendChild(left);
-
-        const right = document.createElement('div');
+        const loggedSection = document.createElement('div');
+        loggedSection.className = 'logged-in-section';
+        
+        const usernameDisplay = document.createElement('div');
+        usernameDisplay.innerHTML = `<span class="auth-username">👋 Zalogowany: ${escapeHtml(username)}</span>`;
+        
         const logoutBtn = document.createElement('button');
         logoutBtn.className = 'auth-btn logout';
-        logoutBtn.textContent = 'Wyloguj';
+        logoutBtn.textContent = '🔒 Wyloguj';
         logoutBtn.onclick = async () => {
             await fetch('http://localhost:3001/api/logout', { method: 'POST' });
             try { localStorage.removeItem('app_username'); } catch (e) {}
             init();
         };
-        right.appendChild(logoutBtn);
-        bar.appendChild(right);
+        
+        loggedSection.appendChild(usernameDisplay);
+        loggedSection.appendChild(logoutBtn);
+        bar.appendChild(loggedSection);
     } else {
-        // compact login form
+        // Enhanced login form
         const form = document.createElement('form');
-        form.style.cssText = 'display:flex; gap:8px; align-items:center;';
+        form.className = 'login-form';
 
         const usernameInput = document.createElement('input');
-        usernameInput.placeholder = 'username';
+        usernameInput.placeholder = '👤 Nazwa użytkownika';
         usernameInput.name = 'username';
-        usernameInput.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
+        usernameInput.className = 'login-input';
+        usernameInput.autocomplete = 'username';
 
         const passwordInput = document.createElement('input');
         passwordInput.type = 'password';
-        passwordInput.placeholder = 'password';
+        passwordInput.placeholder = '🔑 Hasło';
         passwordInput.name = 'password';
-        passwordInput.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
+        passwordInput.className = 'login-input';
+        passwordInput.autocomplete = 'current-password';
 
         const submit = document.createElement('button');
         submit.type = 'submit';
-        submit.textContent = 'Zaloguj';
+        submit.textContent = '🚀 Zaloguj';
         submit.className = 'auth-btn login';
 
         form.appendChild(usernameInput);
@@ -967,6 +972,8 @@ function renderAuthBar(container, username) {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             submit.disabled = true;
+            submit.textContent = '⏳ Logowanie...';
+            
             const u = usernameInput.value.trim();
             const p = passwordInput.value;
             try {
@@ -978,15 +985,16 @@ function renderAuthBar(container, username) {
                 const json = await resp.json();
                 if (json && json.success) {
                     try { localStorage.setItem('app_username', u); } catch (e) {}
-                    showMessage('Zalogowano');
+                    showMessage('✅ Zalogowano pomyślnie!');
                     init();
                 } else {
-                    showMessage('Błąd logowania: ' + (json && json.message ? json.message : 'nieznany'));
+                    showMessage('❌ Błąd logowania: ' + (json && json.message ? json.message : 'nieznany'));
                 }
             } catch (err) {
-                showMessage('Błąd sieci: ' + err.message);
+                showMessage('🌐 Błąd sieci: ' + err.message);
             } finally {
                 submit.disabled = false;
+                submit.textContent = '🚀 Zaloguj';
             }
         });
 

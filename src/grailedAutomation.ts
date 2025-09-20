@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 import sharp from 'sharp';
+import { Logger } from './logger';
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
@@ -48,12 +49,17 @@ export class GrailedAutomation {
     private browser: Browser | null = null;
     private page: Page | null = null;
     private tempDir = path.join(process.cwd(), 'temp', 'grailed-photos');
+    private logger: Logger;
+
+    constructor() {
+        this.logger = Logger.getInstance();
+    }
 
     // Wait for photos to be fully loaded and processed
     async waitForPhotosToLoad(expectedPhotoCount: number): Promise<void> {
         if (!this.page) return;
         
-        console.log(`⏳ Waiting for ${expectedPhotoCount} photos to be fully loaded...`);
+        await this.logger.info(`⏳ Waiting for ${expectedPhotoCount} photos to be fully loaded...`);
         
         const maxWaitTime = 60000; // 60 seconds max wait
         const checkInterval = 2000; // Check every 2 seconds
@@ -71,29 +77,29 @@ export class GrailedAutomation {
                 const completedPhotos = await this.page.$$('img[src*="grailed"], .photo-preview, [class*="photo"][class*="complete"]');
                 
                 if (errorElements.length > 0) {
-                    console.log(`⚠️ Detected ${errorElements.length} photo upload errors`);
+                    await this.logger.warn(`⚠️ Detected ${errorElements.length} photo upload errors`);
                     break;
                 }
                 
                 if (uploadingElements.length === 0) {
-                    console.log(`✅ No uploading indicators found - photos appear to be processed`);
+                    await this.logger.info(`✅ No uploading indicators found - photos appear to be processed`);
                     break;
                 }
                 
-                console.log(`🔄 Still uploading... Found ${uploadingElements.length} uploading indicators`);
+                await this.logger.debug(`🔄 Still uploading... Found ${uploadingElements.length} uploading indicators`);
                 await delay(checkInterval);
                 
             } catch (error) {
-                console.log('⚠️ Error checking photo upload status:', error);
+                await this.logger.warn('⚠️ Error checking photo upload status:', error);
                 break;
             }
         }
         
         // Additional wait to ensure all processing is complete
-        console.log('⏳ Additional 5-second wait to ensure all photos are ready...');
+        await this.logger.info('⏳ Additional 5-second wait to ensure all photos are ready...');
         await delay(5000);
         
-        console.log('✅ Photo loading verification completed');
+        await this.logger.info('✅ Photo loading verification completed');
     }
 
     // Function to get Grailed category mapping with subcategories
@@ -2212,8 +2218,8 @@ export class GrailedAutomation {
 
     async startWithExistingBrowser(userId?: string): Promise<void> {
         try {
-            console.log('🚀 Starting Grailed automation with existing browser...');
-            console.log('🔍 Checking Chrome connection...');
+            await this.logger.banner('GRAILED AUTOMATION STARTING');
+            await this.logger.info('🔍 Checking Chrome connection...');
             
             // Connect to existing browser (or launch automatically)
             await this.initWithExistingBrowser();
@@ -2232,7 +2238,7 @@ export class GrailedAutomation {
             
         } catch (error) {
             if (error instanceof Error && error.message === 'CHROME_NEEDS_LAUNCH') {
-                console.log('🚀 Chrome needs to be launched. Please start Chrome with remote debugging.');
+                await this.logger.warn('🚀 Chrome needs to be launched. Please start Chrome with remote debugging.');
                 throw new Error('CHROME_STARTED_PLEASE_LOGIN');
             }
             throw error;
@@ -2240,36 +2246,43 @@ export class GrailedAutomation {
     }
 
     async processGrailedListings(userId?: string): Promise<void> {
-        console.log('📋 Starting to process Grailed listings...');
+        await this.logger.info('📋 Starting to process Grailed listings...');
         
         // Import supabase fetcher
         const { fetchUnpublishedToGrailedAdvertisements } = await import('./supabaseFetcher');
         
         // Fetch unpublished advertisements
-        console.log('📥 Fetching unpublished Grailed advertisements...');
-    const advertisements = await fetchUnpublishedToGrailedAdvertisements(userId);
+        await this.logger.info('📥 Fetching unpublished Grailed advertisements...');
+        const advertisements = await fetchUnpublishedToGrailedAdvertisements(userId);
         
         if (!advertisements || advertisements.length === 0) {
-            console.log('⚠️ No unpublished advertisements found for Grailed');
+            await this.logger.warn('⚠️ No unpublished advertisements found for Grailed');
             return;
         }
         
-        console.log(`📊 Found ${advertisements.length} unpublished advertisements`);
+        await this.logger.automationStart(advertisements.length);
+        
+        let successful = 0;
+        let failed = 0;
         
         // Process all advertisements
         for (let i = 0; i < advertisements.length; i++) {
             const currentAd = advertisements[i];
             
-            console.log(`\n🏷️ ===== PROCESSING ADVERTISEMENT ${i + 1}/${advertisements.length} =====`);
-            console.log(`📝 Title: ${currentAd.tytul || 'Brak tytułu'}`);
-            console.log(`🆔 ID: ${currentAd.id}`);
-            console.log(`📦 Product type: ${currentAd.rodzaj || 'Brak typu'}`);
-            console.log(`💰 Price: ${currentAd.price || 'Brak ceny'} PLN`);
-            console.log(`👔 Brand: ${currentAd.marka || 'Brak marki'}`);
-            console.log(`📏 Size: ${currentAd.rozmiar || 'Brak rozmiaru'}`);
-            console.log(`🎨 Color: ${currentAd.color || 'Brak koloru'}`);
-            console.log(`📸 Photos: ${currentAd.photo_uris ? currentAd.photo_uris.length : 0} photos`);
-            console.log(`=================================================================\n`);
+            await this.logger.separator();
+            await this.logger.highlight(`PROCESSING ADVERTISEMENT ${i + 1}/${advertisements.length}`);
+            await this.logger.progress(i + 1, advertisements.length, currentAd.tytul || 'Untitled');
+            
+            await this.logger.info('📝 Advertisement Details:', {
+                title: currentAd.tytul || 'Brak tytułu',
+                id: currentAd.id,
+                type: currentAd.rodzaj || 'Brak typu',
+                price: `${currentAd.price || 'Brak ceny'} PLN`,
+                brand: currentAd.marka || 'Brak marki',
+                size: currentAd.rozmiar || 'Brak rozmiaru',
+                color: currentAd.color || 'Brak koloru',
+                photos: currentAd.photo_uris ? currentAd.photo_uris.length : 0
+            });
             
             try {
                 // Navigate to Grailed sell page for each item
@@ -2281,72 +2294,87 @@ export class GrailedAutomation {
                 // Save as draft and update status
                 await this.saveAsDraft(currentAd.id);
                 
-                console.log(`✅ Advertisement ${i + 1}/${advertisements.length} processed successfully!`);
+                await this.logger.success(`Advertisement ${i + 1}/${advertisements.length} processed successfully!`);
+                successful++;
                 
                 // Clean up temporary photos after successful processing
                 await this.cleanupTempPhotos();
                 
                 // Wait before processing next item
                 if (i < advertisements.length - 1) {
-                    console.log('⏳ Waiting 3 seconds before next advertisement...');
+                    await this.logger.info('⏳ Waiting 3 seconds before next advertisement...');
                     await delay(3000);
                 }
                 
             } catch (error) {
-                console.log(`❌ Error processing advertisement ${i + 1}:`, error);
+                await this.logger.failure(`Failed to process advertisement ${i + 1}/${advertisements.length}`, {
+                    error: error instanceof Error ? error.message : String(error),
+                    adId: currentAd.id
+                });
+                failed++;
                 
-                // Clean up temporary photos even if processing failed
+                // Clean up on error too
                 await this.cleanupTempPhotos();
                 
-                console.log('⏭️ Continuing to next advertisement...');
+                // Continue with next advertisement
                 continue;
             }
         }
         
-        console.log(`\n🎉 All ${advertisements.length} advertisements processed!`);
+        await this.logger.separator();
+        await this.logger.automationComplete(advertisements.length, successful, failed);
+        await this.logger.banner('GRAILED AUTOMATION COMPLETED');
         
         // Final cleanup of any remaining temporary photos
-        console.log('\n🧹 Performing final cleanup...');
+        await this.logger.info('🧹 Performing final cleanup...');
         await this.cleanupTempPhotos();
     }
 
     // Process a single advertisement
     async processAdvertisement(ad: Advertisement): Promise<void> {
-        // Select department and category based on product type
+        await this.logger.stepStart('Department & Category Selection');
         await this.selectDepartmentAndCategory(ad);
+        await this.logger.stepComplete('Department & Category Selection', true);
         
-        // Fill brand/designer field
+        await this.logger.stepStart('Brand/Designer Field');
         await this.fillBrand(ad);
+        await this.logger.stepComplete('Brand/Designer Field', true);
         
-        // Select size
+        await this.logger.stepStart('Size Selection');
         await this.selectSize(ad);
+        await this.logger.stepComplete('Size Selection', true);
         
-        // Fill title
+        await this.logger.stepStart('Title Filling');
         await this.fillTitle(ad);
+        await this.logger.stepComplete('Title Filling', true);
         
-        // Select color
+        await this.logger.stepStart('Color Selection');
         await this.selectColor(ad);
+        await this.logger.stepComplete('Color Selection', true);
         
-        // Select condition
+        await this.logger.stepStart('Condition Selection');
         await this.selectCondition(ad);
+        await this.logger.stepComplete('Condition Selection', true);
         
-        // Fill description
+        await this.logger.stepStart('Description Filling');
         await this.fillDescription(ad);
+        await this.logger.stepComplete('Description Filling', true);
         
-        // Select style
+        await this.logger.stepStart('Style Selection');
         await this.selectStyle(ad);
+        await this.logger.stepComplete('Style Selection', true);
         
-        // Fill price
+        await this.logger.stepStart('Price Filling');
         await this.fillPrice(ad);
+        await this.logger.stepComplete('Price Filling', true);
         
-        // Fill country of origin
+        await this.logger.stepStart('Country of Origin');
         await this.fillCountryOfOrigin();
+        await this.logger.stepComplete('Country of Origin', true);
         
-        // Fill measurements in input fields - DISABLED
-        // await this.fillMeasurements(ad);
-        
-        // Upload photos
+        await this.logger.stepStart('Photo Upload');
         await this.uploadPhotos(ad);
+        await this.logger.stepComplete('Photo Upload', true);
     }
 
     async close(): Promise<void> {
