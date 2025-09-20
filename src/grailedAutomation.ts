@@ -852,11 +852,63 @@ export class GrailedAutomation {
             const productMapping = this.getGrailedCategoryMapping(ad.rodzaj);
             const isBottoms = productMapping?.category === 'Bottoms';
             const isAccessories = productMapping?.category === 'Accessories';
+            const isFootwear = productMapping?.category === 'Footwear';
             
             // Map Polish sizes to Grailed sizes based on category
             let sizeMapping: { [key: string]: string } = {};
             
-            if (isAccessories) {
+            if (isFootwear) {
+                // Footwear size mapping - US to EU conversion based on Grailed format
+                sizeMapping = {
+                    // EU sizes (common in Poland)
+                    '37': 'US 5 / EU 37',
+                    '38': 'US 5.5 / EU 38',
+                    '39': 'US 6 / EU 39',
+                    '39-40': 'US 6.5 / EU 39-40',
+                    '40': 'US 7 / EU 40',
+                    '40-41': 'US 7.5 / EU 40-41',
+                    '41': 'US 8 / EU 41',
+                    '41-42': 'US 8.5 / EU 41-42',
+                    '42': 'US 9 / EU 42',
+                    '42-43': 'US 9.5 / EU 42-43',
+                    '43': 'US 10 / EU 43',
+                    '43-44': 'US 10.5 / EU 43-44',
+                    '44': 'US 11 / EU 44',
+                    '44-45': 'US 11.5 / EU 44-45',
+                    '45': 'US 12 / EU 45',
+                    '45-46': 'US 12.5 / EU 45-46',
+                    '46': 'US 13 / EU 46',
+                    '47': 'US 14 / EU 47',
+                    '48': 'US 15 / EU 48',
+                    // US sizes (if already in US format)
+                    '5': 'US 5 / EU 37',
+                    '5.5': 'US 5.5 / EU 38',
+                    '6': 'US 6 / EU 39',
+                    '6.5': 'US 6.5 / EU 39-40',
+                    '7': 'US 7 / EU 40',
+                    '7.5': 'US 7.5 / EU 40-41',
+                    '8': 'US 8 / EU 41',
+                    '8.5': 'US 8.5 / EU 41-42',
+                    '9': 'US 9 / EU 42',
+                    '9.5': 'US 9.5 / EU 42-43',
+                    '10': 'US 10 / EU 43',
+                    '10.5': 'US 10.5 / EU 43-44',
+                    '11': 'US 11 / EU 44',
+                    '11.5': 'US 11.5 / EU 44-45',
+                    '12': 'US 12 / EU 45',
+                    '12.5': 'US 12.5 / EU 45-46',
+                    '13': 'US 13 / EU 46',
+                    '14': 'US 14 / EU 47',
+                    '15': 'US 15 / EU 48',
+                    // Letter sizes for some footwear (e.g., flip-flops)
+                    'XS': 'US 5 / EU 37',
+                    'S': 'US 7 / EU 40',
+                    'M': 'US 9 / EU 42',
+                    'L': 'US 11 / EU 44',
+                    'XL': 'US 13 / EU 46',
+                    'XXL': 'US 15 / EU 48'
+                };
+            } else if (isAccessories) {
                 // Accessories size mapping - mostly One Size
                 sizeMapping = {
                     'uniwersalny': 'One Size',
@@ -963,7 +1015,7 @@ export class GrailedAutomation {
                 }
             }
             
-            const categoryType = isAccessories ? 'Accessories' : (isBottoms ? 'Bottoms' : 'Tops');
+            const categoryType = isFootwear ? 'Footwear' : (isAccessories ? 'Accessories' : (isBottoms ? 'Bottoms' : 'Tops'));
             console.log(`🎯 Mapowanie rozmiaru (${categoryType}): ${ad.rozmiar} -> ${sizeToMap} -> ${grailedSize}`);
             
             // Select the size from dropdown
@@ -1315,10 +1367,13 @@ export class GrailedAutomation {
             // Click the condition dropdown button
             console.log('🎯 Clicking condition dropdown button...');
             const conditionButton = 'button[id="radix-:rr:"]';
-            await this.page.waitForSelector(conditionButton, { timeout: 5000 });
-            await this.page.click(conditionButton);
             
+            await this.page.waitForSelector(conditionButton, { timeout: 5000 });
+            console.log('🔍 Found condition button');
+            
+            await this.page.click(conditionButton);
             console.log('✅ Condition dropdown opened');
+            
             await delay(1000);
             
             // Map Polish conditions to Grailed conditions
@@ -1335,14 +1390,25 @@ export class GrailedAutomation {
             
             // Find and click the matching condition
             const conditionClicked = await this.page.evaluate((condition) => {
+                console.log(`🔍 Looking for condition: "${condition}"`);
                 const conditionElements = Array.from(document.querySelectorAll('div[role="menuitem"]'));
+                console.log(`🔍 Found ${conditionElements.length} condition options`);
+                
+                for (let i = 0; i < conditionElements.length; i++) {
+                    const el = conditionElements[i];
+                    const text = el.textContent?.trim();
+                    console.log(`   ${i + 1}. "${text}"`);
+                }
+                
                 const conditionEl = conditionElements.find(el => 
                     el.textContent?.includes(condition)
                 );
                 if (conditionEl) {
+                    console.log(`✅ Found matching condition: "${conditionEl.textContent}"`);
                     (conditionEl as HTMLElement).click();
                     return true;
                 }
+                console.log(`❌ Condition "${condition}" not found`);
                 return false;
             }, grailedCondition);
             
@@ -1351,23 +1417,34 @@ export class GrailedAutomation {
             } else {
                 console.log(`⚠️ Condition ${grailedCondition} not found, selecting "Used" as fallback...`);
                 // Fallback: select "Used"
-                await this.page.evaluate(() => {
+                const fallbackClicked = await this.page.evaluate(() => {
+                    console.log('🔍 Looking for "Used" fallback...');
                     const conditionElements = Array.from(document.querySelectorAll('div[role="menuitem"]'));
                     const usedCondition = conditionElements.find(el => 
                         el.textContent?.includes('Used') && !el.textContent?.includes('Gently') && !el.textContent?.includes('Very')
                     );
                     if (usedCondition) {
+                        console.log(`✅ Found "Used" fallback: "${usedCondition.textContent}"`);
                         (usedCondition as HTMLElement).click();
+                        return true;
                     }
+                    console.log('❌ "Used" fallback not found');
+                    return false;
                 });
-                console.log('✅ Selected "Used" condition as fallback');
+                
+                if (fallbackClicked) {
+                    console.log('✅ Selected "Used" condition as fallback');
+                } else {
+                    console.log('❌ Could not select any condition');
+                }
             }
             
             await delay(1000);
+            console.log('✅ Condition selection completed');
             
         } catch (error) {
             console.log('❌ Error selecting condition:', error);
-            throw new Error('Failed to select condition');
+            console.log('⚠️ Continuing without condition selection...');
         }
     }
 
@@ -1867,6 +1944,105 @@ export class GrailedAutomation {
         }
     }
 
+    // Fill country of origin
+    async fillCountryOfOrigin(): Promise<void> {
+        if (!this.page) throw new Error('Page not initialized');
+        
+        console.log(`\n🌍 ===== FILLING COUNTRY OF ORIGIN =====`);
+        console.log(`🌏 Setting country: China`);
+        console.log(`=======================================\n`);
+        
+        try {
+            // Find the country of origin input field
+            const countryInput = 'input#country-of-origin';
+            await this.page.waitForSelector(countryInput, { timeout: 5000 });
+            
+            console.log('🎯 Clicking country input field...');
+            await this.page.click(countryInput);
+            
+            // Clear existing content
+            await this.page.keyboard.down('Control');
+            await this.page.keyboard.press('a');
+            await this.page.keyboard.up('Control');
+            
+            console.log('🎯 Typing "China"...');
+            await this.page.type(countryInput, 'China');
+            
+            // Wait for dropdown to appear and try multiple approaches
+            await delay(2000);
+            
+            console.log('🔍 Looking for dropdown options...');
+            
+            try {
+                // First try: wait for specific country dropdown to appear
+                await this.page.waitForSelector('li[data-cy="menu-item"][role="menuitem"]', { timeout: 3000 });
+                
+                // Click first option using page.click() method
+                const firstOptionSelector = 'li[data-cy="menu-item"][role="menuitem"]';
+                const firstOption = await this.page.$(firstOptionSelector);
+                
+                if (firstOption) {
+                    const optionText = await this.page.evaluate(el => el.textContent?.trim(), firstOption);
+                    const ariaLabel = await this.page.evaluate(el => el.getAttribute('aria-label'), firstOption);
+                    console.log(`🎯 Found first option: "${optionText}" (aria-label: "${ariaLabel}")`);
+                    
+                    await firstOption.click();
+                    console.log('✅ First country option clicked successfully');
+                } else {
+                    throw new Error('First option not found');
+                }
+                
+            } catch (selectorError) {
+                console.log('⚠️ Direct selector failed, trying JavaScript evaluation...');
+                
+                // Fallback: JavaScript evaluation method
+                const optionSelected = await this.page.evaluate(() => {
+                    // Look for exact country dropdown structure
+                    const countryOptions = Array.from(document.querySelectorAll('li[data-cy="menu-item"][role="menuitem"]'));
+                    
+                    console.log(`🔍 Found ${countryOptions.length} country dropdown options`);
+                    
+                    if (countryOptions.length > 0) {
+                        const firstOption = countryOptions[0] as HTMLElement;
+                        const optionText = firstOption.textContent?.trim();
+                        const ariaLabel = firstOption.getAttribute('aria-label');
+                        console.log(`🎯 Clicking first option: "${optionText}" (aria-label: "${ariaLabel}")`);
+                        firstOption.click();
+                        return true;
+                    }
+                    
+                    // Try even more generic selectors
+                    const fallbackOptions = Array.from(document.querySelectorAll('li[role="menuitem"], [class*="menuItem"], [class*="option"]'));
+                    console.log(`🔍 Fallback: Found ${fallbackOptions.length} generic dropdown options`);
+                    
+                    if (fallbackOptions.length > 0) {
+                        const firstOption = fallbackOptions[0] as HTMLElement;
+                        const optionText = firstOption.textContent?.trim();
+                        console.log(`🎯 Clicking first fallback option: "${optionText}"`);
+                        firstOption.click();
+                        return true;
+                    }
+                    
+                    return false;
+                });
+                
+                if (!optionSelected) {
+                    console.log('🔄 Final fallback: pressing Arrow Down + Enter...');
+                    await this.page.keyboard.press('ArrowDown');
+                    await delay(500);
+                    await this.page.keyboard.press('Enter');
+                }
+            }
+            
+            console.log('✅ Country of origin filled - first option selected');
+            await delay(1000);
+            
+        } catch (error) {
+            console.log('❌ Error filling country of origin:', error);
+            console.log('⚠️ Continuing without country of origin...');
+        }
+    }
+
     // Upload photos
     async uploadPhotos(ad: Advertisement): Promise<void> {
         if (!this.page) throw new Error('Page not initialized');
@@ -2107,6 +2283,9 @@ export class GrailedAutomation {
                 
                 console.log(`✅ Advertisement ${i + 1}/${advertisements.length} processed successfully!`);
                 
+                // Clean up temporary photos after successful processing
+                await this.cleanupTempPhotos();
+                
                 // Wait before processing next item
                 if (i < advertisements.length - 1) {
                     console.log('⏳ Waiting 3 seconds before next advertisement...');
@@ -2115,12 +2294,20 @@ export class GrailedAutomation {
                 
             } catch (error) {
                 console.log(`❌ Error processing advertisement ${i + 1}:`, error);
+                
+                // Clean up temporary photos even if processing failed
+                await this.cleanupTempPhotos();
+                
                 console.log('⏭️ Continuing to next advertisement...');
                 continue;
             }
         }
         
         console.log(`\n🎉 All ${advertisements.length} advertisements processed!`);
+        
+        // Final cleanup of any remaining temporary photos
+        console.log('\n🧹 Performing final cleanup...');
+        await this.cleanupTempPhotos();
     }
 
     // Process a single advertisement
@@ -2152,6 +2339,9 @@ export class GrailedAutomation {
         // Fill price
         await this.fillPrice(ad);
         
+        // Fill country of origin
+        await this.fillCountryOfOrigin();
+        
         // Fill measurements in input fields - DISABLED
         // await this.fillMeasurements(ad);
         
@@ -2162,6 +2352,51 @@ export class GrailedAutomation {
     async close(): Promise<void> {
         // Don't close the browser since we're using an existing instance
         console.log('🔚 Grailed automation finished');
+    }
+
+    // Clean up all temporary photo files from the temp directory
+    async cleanupTempPhotos(): Promise<void> {
+        try {
+            console.log('🧹 Cleaning up all temporary photo files...');
+            const fs = await import('fs');
+            const path = await import('path');
+            
+            // Ensure temp directory exists
+            if (!await fs.promises.access(this.tempDir).then(() => true).catch(() => false)) {
+                console.log('📁 Temp directory does not exist, nothing to clean up');
+                return;
+            }
+            
+            // Read all files in temp directory
+            const files = await fs.promises.readdir(this.tempDir);
+            const photoFiles = files.filter(file => 
+                file.startsWith('grailed_photo_') && 
+                (file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
+            );
+            
+            if (photoFiles.length === 0) {
+                console.log('📁 No temporary photo files found');
+                return;
+            }
+            
+            console.log(`🗑️ Found ${photoFiles.length} temporary photo files to delete`);
+            
+            // Delete all photo files
+            for (const file of photoFiles) {
+                try {
+                    const filePath = path.join(this.tempDir, file);
+                    await fs.promises.unlink(filePath);
+                    console.log(`✅ Deleted: ${file}`);
+                } catch (error) {
+                    console.log(`⚠️ Could not delete: ${file} - ${error}`);
+                }
+            }
+            
+            console.log('✅ Temporary photo cleanup completed');
+            
+        } catch (error) {
+            console.log('⚠️ Error during photo cleanup:', error);
+        }
     }
 
     async startChromeWithGrailed(): Promise<boolean> {

@@ -2563,7 +2563,7 @@ export class VintedAutomation {
                 return normalized;
             };
 
-            // Stwórz listę wariantów do przetestowania
+            // Stwórz listę wariantów do przetestowania (tylko dokładne dopasowania)
             const allSizeVariants = [
                 normalizedTargetSize,
                 targetSize,
@@ -2571,10 +2571,10 @@ export class VintedAutomation {
                 normalizeSize(normalizedTargetSize),
                 targetSize.replace(/\./g, ','),
                 targetSize.replace(/,/g, '.'),
-                // Dodaj wszystkie dostępne rozmiary jako możliwe dopasowania
+                // Tylko dokładne dopasowania z dostępnych rozmiarów
                 ...availableSizes.filter(size => 
-                    size.toLowerCase().includes(targetSize.toLowerCase()) ||
-                    targetSize.toLowerCase().includes(size.toLowerCase())
+                    size.toLowerCase() === targetSize.toLowerCase() ||
+                    size.toLowerCase() === normalizedTargetSize.toLowerCase()
                 )
             ];
 
