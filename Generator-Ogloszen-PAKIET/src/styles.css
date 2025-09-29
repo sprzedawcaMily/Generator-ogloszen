@@ -1,0 +1,487 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f3f4f6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+}
+
+.container {
+    background-color: #ffffff;
+    padding: 2rem;
+    border-radius: 1.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+    max-width: 800px;
+    width: 100%;
+}
+
+.item-card {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: relative;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.item-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.title-preview {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1f2937;
+    line-height: 1.4;
+    margin: 8px 0;
+    padding: 8px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.item-number {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background-color: #3b82f6;
+    color: white;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    z-index: 10;
+}
+}
+
+.item-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.message-box {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #4CAF50;
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s, visibility 0.5s;
+}
+
+.message-box.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.loading, .error {
+    text-align: center;
+    padding: 2rem;
+    color: #374151;
+}
+
+.error {
+    color: #dc2626;
+}
+
+.preview-container {
+    background-color: white;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #4b5563;
+}
+
+.photo-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+    background-color: white;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.product-photo {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid #e5e7eb;
+    transition: transform 0.2s ease;
+    cursor: pointer;
+}
+
+.product-photo:hover {
+    transform: scale(1.05);
+    border-color: #3b82f6;
+}
+
+.status-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-badge.completed {
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    color: white;
+}
+
+.status-badge.incomplete {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+}
+
+.item-card.completed {
+    border-left: 4px solid #10b981;
+}
+
+.item-card.published-vinted {
+    border-left: 4px solid #6b7280;
+    background-color: #f3f4f6;
+}
+
+.item-card.published-vinted .title-preview {
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    color: white;
+}
+
+.item-card.published-vinted .item-number {
+    background-color: #6b7280;
+}
+
+.item-card {
+    position: relative;
+}
+
+.button-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.copy-btn {
+    color: white;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.copy-title-btn {
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+}
+
+/* English copy buttons: visually match main buttons but keep clear intent */
+.copy-title-en-btn {
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+}
+
+.copy-desc-en-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.copy-photos-btn {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.copy-desc-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.copy-price-vinted-btn {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+
+.copy-price-grailed-btn {
+    background: linear-gradient(135deg, #f59e42 0%, #fbbf24 100%);
+    color: #1f2937;
+}
+
+.vinted-status-btn {
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    color: white;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vinted-status-btn.published {
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.vinted-status-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.copy-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.copy-btn:active {
+    transform: translateY(0);
+}
+
+/* Disabled / secondary appearance for buttons (also applies when adding .disabled class) */
+.copy-btn[disabled], .copy-btn.disabled {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+    cursor: not-allowed !important;
+}
+
+/* keep button sizes consistent */
+.copy-btn.copy-title-en-btn, .copy-btn.copy-desc-en-btn {
+    min-height: 48px;
+    padding: 12px 16px;
+}
+
+/* Grailed status button styling */
+.grailed-status-btn {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #11182722; /* subtle outline */
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.grailed-status-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.06);
+}
+
+.grailed-status-btn.published {
+    background: #ffffff; /* keep white */
+    color: #0b1220;
+    border: 2px solid #0b1220; /* stronger dark border when published */
+    box-shadow: none;
+}
+
+.grailed-status-btn[disabled], .grailed-status-btn.disabled {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
+    border: 1px solid #e5e7eb !important;
+    cursor: not-allowed !important;
+}
+
+.full-description {
+    margin-top: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    background-color: #f9fafb;
+}
+
+.description-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.description-header h4 {
+    margin: 0;
+    color: #374151;
+}
+
+.close-desc-btn {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.description-content {
+    background-color: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 12px;
+    white-space: pre-wrap;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.copy-full-desc-btn {
+    background-color: #059669;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    width: 100%;
+}
+
+.description-preview-container {
+    margin-top: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.description-preview-header {
+    margin: 0;
+    color: #374151;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 16px;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.description-preview-header:hover {
+    background: linear-gradient(135deg, #5b21b6 0%, #4c1d95 100%);
+}
+
+.description-preview-header::after {
+    content: '▼';
+    transition: transform 0.3s ease;
+    font-size: 12px;
+}
+
+.description-preview-container.collapsed .description-preview-header::after {
+    transform: rotate(-90deg);
+}
+
+.description-preview-content {
+    background-color: white;
+    border: none;
+    padding: 16px;
+    white-space: pre-wrap;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #374151;
+    max-height: 300px;
+    overflow-y: auto;
+    transition: all 0.3s ease;
+}
+
+.description-preview-container.collapsed .description-preview-content {
+    max-height: 0;
+    padding: 0 16px;
+    overflow: hidden;
+}
+
+.refresh-preview-btn {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    width: 100%;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px;
+    margin: 0;
+    border-radius: 0 0 12px 12px;
+    transition: all 0.3s ease;
+}
+
+.refresh-preview-btn:hover {
+    background: linear-gradient(135deg, #5b21b6 0%, #4c1d95 100%);
+}
+
+.description-preview-container.collapsed .refresh-preview-btn {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .button-container {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .copy-btn {
+        min-height: 44px;
+        font-size: 16px;
+    }
+    
+    .title-preview {
+        font-size: 16px;
+    }
+    
+    .item-card {
+        padding: 1rem;
+    }
+    
+    .photo-container {
+        justify-content: center;
+    }
+    
+    .product-photo {
+        width: 70px;
+        height: 70px;
+    }
+}

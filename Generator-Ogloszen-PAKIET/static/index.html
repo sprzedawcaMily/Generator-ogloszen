@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generator Opisów Produktów</title>
+    <link href="/static/styles.css" rel="stylesheet"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            max-width: 800px;
+            width: 100%;
+        }
+        .item-card {
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            position: relative;
+        }
+        .item-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+        }
+        .item-number {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background-color: #6366f1;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .copy-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem 1.5rem;
+            margin: 0.5rem;
+            height: 3.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            text-align: center;
+            background-color: #6366f1;
+            color: white;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .copy-button:hover {
+            background-color: #4f46e5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+        }
+        .title-button {
+            background-color: #f3f4f6;
+            color: #4b5563;
+        }
+        .title-button:hover {
+            background-color: #e5e7eb;
+        }
+        .message-box {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4CAF50;
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s, visibility 0.5s;
+        }
+        .message-box.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .preview-container {
+            background-color: #ffffff;
+            border: 1px dashed #d1d5db;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            white-space: pre-wrap;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #4b5563;
+        }
+        .preview-container b {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .title-preview {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 0.75rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container space-y-8">
+        <h1 class="text-3xl font-bold text-center text-gray-800">Generator Opisów Produktów</h1>
+        <p class="text-center text-gray-600">
+            Poniżej znajdziesz gotowe opisy na podstawie Twoich danych.
+            Kliknij "Kopiuj Opis" lub "Kopiuj Tytuł", aby otrzymać całą treść gotową do wklejenia.
+        </p>
+
+        <div id="itemsContainer">
+            <!-- Tutaj będą generowane elementy z listy -->
+        </div>
+    </div>
+
+    <div id="messageBox" class="message-box"></div>
+    <script type="module">
+        import { data } from '/src/data.js';
+        import { parseData, formatItem, formatTitle } from '/src/formatter.js';
+        
+        function showMessage(text) {
+            const messageBox = document.getElementById('messageBox');
+            messageBox.textContent = text;
+            messageBox.classList.add('show');
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, 2000);
+        }
+
+        function copyToClipboard(text, successMessage) {
+            navigator.clipboard.writeText(text).then(() => {
+                showMessage(successMessage);
+            }).catch(() => {
+                showMessage('Błąd kopiowania, spróbuj ponownie.');
+            });
+        }
+
+        function init() {
+            const container = document.getElementById('itemsContainer');
+            if (!container) {
+                console.error('Container not found!');
+                return;
+            }
+
+            console.log('Data received:', data);
+            const items = parseData(data);
+            console.log('Parsed items:', items);
+
+            if (items.length === 0) {
+                container.innerHTML = '<div class="text-red-500">Nie znaleziono żadnych przedmiotów</div>';
+                return;
+            }
+
+            items.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = 'item-card';
+
+                const itemNumber = document.createElement('span');
+                itemNumber.className = 'item-number';
+                itemNumber.textContent = index + 1;
+
+                const titlePreview = document.createElement('div');
+                titlePreview.className = 'title-preview';
+                const title = formatTitle(item);
+                titlePreview.textContent = title;
+
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'preview-container';
+                const formattedItem = formatItem(item);
+                previewContainer.innerHTML = formattedItem.replace(/\n/g, '<br>');
+
+                // Dodaj przycisk rozwijania
+                const expandButton = document.createElement('div');
+                expandButton.className = 'expand-button';
+                expandButton.innerHTML = 'Pokaż więcej ▼';
+                
+                // Dodaj funkcję rozwijania/zwijania
+                expandButton.onclick = () => {
+                    previewContainer.classList.toggle('expanded');
+                    expandButton.innerHTML = previewContainer.classList.contains('expanded') ? 'Pokaż mniej ▲' : 'Pokaż więcej ▼';
+                };
+                
+                previewContainer.appendChild(expandButton);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.className = 'flex flex-col md:flex-row justify-center gap-4 mt-4';
+
+                const copyTitleButton = document.createElement('button');
+                copyTitleButton.className = 'copy-button title-button flex-1';
+                copyTitleButton.textContent = 'Kopiuj Tytuł';
+                copyTitleButton.onclick = () => copyToClipboard(title, 'Tytuł skopiowany!');
+
+                const copyDescButton = document.createElement('button');
+                copyDescButton.className = 'copy-button flex-1';
+                copyDescButton.textContent = 'Kopiuj Opis';
+                copyDescButton.onclick = () => copyToClipboard(formattedItem, 'Opis skopiowany!');
+
+                buttonContainer.appendChild(copyTitleButton);
+                buttonContainer.appendChild(copyDescButton);
+
+                card.appendChild(itemNumber);
+                card.appendChild(titlePreview);
+                card.appendChild(previewContainer);
+                card.appendChild(buttonContainer);
+
+                container.appendChild(card);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
