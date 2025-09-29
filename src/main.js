@@ -912,8 +912,120 @@ async function init() {
         priceAutomationTitle.style.cssText = 'margin: 0 0 10px 0; color: #16a34a;';
         
         const priceAutomationDescription = document.createElement('p');
-        priceAutomationDescription.textContent = 'Krok 1: Uruchom przeglądarkę i zaloguj się do Vinted. Krok 2: Uruchom automatyzację obniżania cen o 25%.';
+        priceAutomationDescription.textContent = 'Krok 1: Uruchom przeglądarkę i zaloguj się do Vinted. Krok 2: Opcjonalnie wklej URL swojego profilu. Krok 3: Uruchom automatyzację obniżania cen o 25%.';
         priceAutomationDescription.style.cssText = 'margin: 0 0 15px 0; color: #64748b; font-size: 14px;';
+        
+        // Profile URL input section
+        const profileUrlSection = document.createElement('div');
+        profileUrlSection.style.cssText = 'margin: 15px 0; padding: 15px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;';
+        
+        const profileUrlLabel = document.createElement('label');
+        profileUrlLabel.textContent = '🔗 URL Profilu Vinted (opcjonalne):';
+        profileUrlLabel.style.cssText = 'display: block; margin-bottom: 8px; color: #374151; font-weight: 500; font-size: 14px;';
+        
+        const profileUrlInput = document.createElement('input');
+        profileUrlInput.type = 'text';
+        profileUrlInput.id = 'vintedProfileUrl';
+        profileUrlInput.placeholder = 'https://www.vinted.pl/member/12345678 (zostaw puste dla automatycznego wykrywania)';
+        profileUrlInput.style.cssText = 'width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box; margin-bottom: 10px;';
+        
+        // Dodatkowe opcje automatyzacji
+        const optionsRow = document.createElement('div');
+        optionsRow.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 10px 0;';
+        
+        // Opcja startu od X ogłoszenia
+        const startFromContainer = document.createElement('div');
+        const startFromLabel = document.createElement('label');
+        startFromLabel.textContent = '🚀 Start od ogłoszenia (od dołu):';
+        startFromLabel.style.cssText = 'display: block; margin-bottom: 5px; color: #374151; font-weight: 500; font-size: 12px;';
+        
+        const startFromInput = document.createElement('input');
+        startFromInput.type = 'number';
+        startFromInput.id = 'vintedStartFrom';
+        startFromInput.placeholder = '1';
+        startFromInput.min = '1';
+        startFromInput.value = '1';
+        startFromInput.style.cssText = 'width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px; box-sizing: border-box;';
+        
+        startFromContainer.appendChild(startFromLabel);
+        startFromContainer.appendChild(startFromInput);
+        
+        // Opcja limitu ogłoszeń
+        const limitContainer = document.createElement('div');
+        const limitLabel = document.createElement('label');
+        limitLabel.textContent = '🔢 Ile ogłoszeń zmienić:';
+        limitLabel.style.cssText = 'display: block; margin-bottom: 5px; color: #374151; font-weight: 500; font-size: 12px;';
+        
+        const limitInput = document.createElement('input');
+        limitInput.type = 'number';
+        limitInput.id = 'vintedLimit';
+        limitInput.placeholder = 'puste = wszystkie';
+        limitInput.min = '1';
+        limitInput.max = '1000';
+        limitInput.value = ''; // Puste pole = wszystkie ogłoszenia
+        limitInput.style.cssText = 'width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px; box-sizing: border-box;';
+        
+        limitContainer.appendChild(limitLabel);
+        limitContainer.appendChild(limitInput);
+        
+        // Opcja procentu zniżki
+        const discountContainer = document.createElement('div');
+        const discountLabel = document.createElement('label');
+        discountLabel.textContent = '💰 Procent zniżki (%):';
+        discountLabel.style.cssText = 'display: block; margin-bottom: 5px; color: #374151; font-weight: 500; font-size: 12px;';
+        
+        const discountInput = document.createElement('input');
+        discountInput.type = 'number';
+        discountInput.id = 'vintedDiscount';
+        discountInput.placeholder = '25';
+        discountInput.min = '1';
+        discountInput.max = '90';
+        discountInput.value = '25'; // Domyślnie 25% zniżki
+        discountInput.style.cssText = 'width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px; box-sizing: border-box;';
+        
+        discountContainer.appendChild(discountLabel);
+        discountContainer.appendChild(discountInput);
+        
+        optionsRow.appendChild(startFromContainer);
+        optionsRow.appendChild(limitContainer);
+        optionsRow.appendChild(discountContainer);
+        
+        // Przyciski pomocnicze
+        const urlButtonsRow = document.createElement('div');
+        urlButtonsRow.style.cssText = 'display: flex; gap: 8px; margin: 8px 0; justify-content: flex-start;';
+        
+        // Przycisk do czyszczenia pola
+        const clearUrlButton = document.createElement('button');
+        clearUrlButton.textContent = '🗑️ Wyczyść';
+        clearUrlButton.style.cssText = 'padding: 6px 12px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; cursor: pointer;';
+        clearUrlButton.onclick = () => {
+            profileUrlInput.value = '';
+            showMessage('🗑️ Pole URL zostało wyczyszczone');
+        };
+        
+        // Przycisk do przykładowego URL
+        const exampleUrlButton = document.createElement('button');
+        exampleUrlButton.textContent = '📋 Przykład';
+        exampleUrlButton.style.cssText = 'padding: 6px 12px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; border-radius: 4px; font-size: 12px; cursor: pointer;';
+        exampleUrlButton.onclick = () => {
+            profileUrlInput.value = 'https://www.vinted.pl/member/12345678';
+            profileUrlInput.focus();
+            profileUrlInput.select();
+            showMessage('📋 Wklejono przykładowy URL - zastąp 12345678 swoim ID');
+        };
+        
+        urlButtonsRow.appendChild(clearUrlButton);
+        urlButtonsRow.appendChild(exampleUrlButton);
+        
+        const profileUrlHint = document.createElement('p');
+        profileUrlHint.textContent = '💡 Wskazówka: Automatyzacja zacznie od najstarszych ogłoszeń (od dołu) i przetworzy określoną liczbę. Start 1 = najstarsze ogłoszenie.';
+        profileUrlHint.style.cssText = 'margin: 8px 0 0 0; color: #6b7280; font-size: 12px; font-style: italic;';
+        
+        profileUrlSection.appendChild(profileUrlLabel);
+        profileUrlSection.appendChild(profileUrlInput);
+        profileUrlSection.appendChild(optionsRow);
+        profileUrlSection.appendChild(urlButtonsRow);
+        profileUrlSection.appendChild(profileUrlHint);
         
         const priceButtonRow = document.createElement('div');
         priceButtonRow.style.cssText = 'display: flex; gap: 12px; justify-content: center; align-items: center;';
@@ -936,6 +1048,7 @@ async function init() {
         
         priceAutomationContainer.appendChild(priceAutomationTitle);
         priceAutomationContainer.appendChild(priceAutomationDescription);
+        priceAutomationContainer.appendChild(profileUrlSection);
         priceAutomationContainer.appendChild(priceButtonRow);
         container.appendChild(priceAutomationContainer);
         
@@ -1259,7 +1372,45 @@ async function connectGrailedAutomation() {
 // Function to run Vinted price automation
 async function runVintedPriceAutomation() {
     try {
-        showMessage('💰 Uruchamiam automatyzację zmiany cen Vinted...');
+        // Pobierz wszystkie parametry z pól
+        const profileUrlInput = document.getElementById('vintedProfileUrl');
+        const startFromInput = document.getElementById('vintedStartFrom');
+        const limitInput = document.getElementById('vintedLimit');
+        const discountInput = document.getElementById('vintedDiscount');
+        
+        const profileUrl = profileUrlInput ? profileUrlInput.value.trim() : '';
+        const startFrom = startFromInput ? parseInt(startFromInput.value) || 1 : 1;
+        const limit = limitInput && limitInput.value ? parseInt(limitInput.value) : -1; // -1 = wszystkie ogłoszenia
+        const discount = discountInput ? parseInt(discountInput.value) || 25 : 25; // domyślnie 25%
+        
+        // Walidacja parametrów
+        if (startFrom < 1) {
+            showMessage('❌ Start musi być większy niż 0');
+            return;
+        }
+        
+        if (limit !== -1 && (limit < 1 || limit > 1000)) {
+            showMessage('❌ Limit musi być -1 (wszystkie) lub między 1 a 1000');
+            return;
+        }
+        
+        if (discount < 1 || discount > 90) {
+            showMessage('❌ Procent zniżki musi być między 1% a 90%');
+            return;
+        }
+        
+        if (profileUrl) {
+            // Walidacja URL
+            if (!profileUrl.includes('vinted.pl/member/') || !profileUrl.match(/\/member\/\d+/)) {
+                showMessage('❌ Nieprawidłowy URL profilu. Powinien być w formacie: https://www.vinted.pl/member/12345678');
+                return;
+            }
+            const limitText = limit === -1 ? 'wszystkie' : limit;
+            showMessage(`💰 Uruchamiam automatyzację cen dla profilu: ${profileUrl} (start: ${startFrom}, limit: ${limitText}, zniżka: ${discount}%)`);
+        } else {
+            const limitText = limit === -1 ? 'wszystkie' : limit;
+            showMessage(`💰 Uruchamiam automatyzację cen z automatycznym wykrywaniem profilu (start: ${startFrom}, limit: ${limitText}, zniżka: ${discount}%)`);
+        }
         
         const response = await fetch('/api/vinted/price-automation', {
             method: 'POST',
@@ -1267,7 +1418,10 @@ async function runVintedPriceAutomation() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                profileUrl: 'https://www.vinted.pl/member/130445339'
+                profileUrl: profileUrl || undefined,
+                startFrom: startFrom,
+                limit: limit,
+                discount: discount
             })
         });
         

@@ -673,14 +673,35 @@ async function handleFetch(req: Request) {
             try {
                 const { runVintedPriceAutomationWithExistingBrowser } = await import('./vintedPriceAutomation');
 
-                // Pobierz URL profilu z body żądania
+                // Pobierz parametry z body żądania
                 const body = await req.json().catch(() => ({}));
-                const profileUrl = body.profileUrl || 'https://www.vinted.pl/member/130445339';
+                const profileUrl = body.profileUrl; // Może być undefined
+                const startFrom = parseInt(body.startFrom) || 1;
+                const limit = body.limit === undefined ? -1 : parseInt(body.limit); // -1 = wszystkie ogłoszenia
+                const discount = parseInt(body.discount) || 25; // domyślnie 25%
 
                 console.log('🏷️ Uruchamianie automatyzacji zmiany cen Vinted...');
+                if (profileUrl) {
+                    // Walidacja URL jeśli podany
+                    if (!profileUrl.includes('vinted.pl/member/') || !profileUrl.match(/\/member\/\d+/)) {
+                        return new Response(JSON.stringify({
+                            success: false,
+                            message: 'Nieprawidłowy URL profilu. Powinien być w formacie: https://www.vinted.pl/member/12345678'
+                        }), {
+                            status: 400,
+                            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                        });
+                    }
+                    console.log(`🔗 Używam podanego URL profilu: ${profileUrl}`);
+                } else {
+                    console.log('🔍 Automatyczne wykrywanie profilu zalogowanego użytkownika...');
+                }
+                
+                const limitText = limit === -1 ? 'wszystkie' : `${limit}`;
+                console.log(`⚙️ Parametry: start od ${startFrom}, limit ${limitText} ogłoszeń, zniżka ${discount}%`);
 
-                // Uruchom automatyzację w tle
-                runVintedPriceAutomationWithExistingBrowser(profileUrl)
+                // Uruchom automatyzację w tle z nowymi parametrami
+                runVintedPriceAutomationWithExistingBrowser(profileUrl, startFrom, limit, discount)
                     .then(() => console.log('✅ Vinted price automation completed successfully'))
                     .catch(err => console.error('❌ Vinted price automation failed:', err));
 

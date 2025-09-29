@@ -45,16 +45,11 @@ Ta automatyzacja przechodzi przez wszystkie Twoje ogłoszenia na Vinted i **obni
 
 ## ⚙️ Konfiguracja
 
-### Domyślny profil
-Automatyzacja domyślnie używa profilu: `https://www.vinted.pl/member/130445339`
+### Automatyczne wykrywanie profilu
+Automatyzacja domyślnie automatycznie wykrywa profil zalogowanego użytkownika na Vinted.
 
-### Zmiana profilu
-Możesz zmienić profil w pliku `run-vinted-price-automation.ts`:
-```typescript
-const DEFAULT_PROFILE_URL = 'https://www.vinted.pl/member/TWOJ_ID';
-```
-
-Lub przekazać jako argument:
+### Ręczne podanie profilu (opcjonalne)
+Możesz nadal podać konkretny profil jako argument:
 ```powershell
 bun run run-vinted-price-automation.ts "https://www.vinted.pl/member/TWOJ_ID"
 ```
