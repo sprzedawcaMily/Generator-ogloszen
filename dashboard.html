@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Vinted Automation</title>
+    <title>Dashboard - Grailed Automation</title>
     <style>
         * {
             margin: 0;
@@ -259,7 +259,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🚀 Dashboard Vinted Automation</h1>
+        <h1>🚀 Dashboard Grailed Automation</h1>
 
         <div class="cards-grid">
             <!-- Status Card -->
@@ -323,12 +323,6 @@
                     </button>
                     <button class="refresh-btn" onclick="exportLogs()" style="background: #28a745;">
                         📁 Eksportuj logi
-                    </button>
-                    <button class="refresh-btn" onclick="startPriceOptimizer()" style="background: #ff9500;">
-                        💰 Optymalizator Cen
-                    </button>
-                    <button class="refresh-btn" onclick="startVintedAutomation()" style="background: #8b5cf6;">
-                        🚀 Automatyzacja Vinted
                     </button>
                 </div>
             </div>
@@ -547,52 +541,6 @@
                 
             } catch (error) {
                 alert('Błąd podczas eksportowania logów');
-            }
-        }
-
-        async function startPriceOptimizer() {
-            if (confirm('Uruchomić optymalizator cen Vinted?\n\nUWAGA: Upewnij się, że:\n- Chrome jest uruchomiony z debug portem\n- Jesteś zalogowany na Vinted\n- Znajdujesz się na profilu z ogłoszeniami')) {
-                try {
-                    const response = await fetch('/api/vinted/price-optimizer', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        alert('✅ Optymalizator cen uruchomiony!\n\nSprawdź konsole w terminalu, aby śledzić postęp.');
-                    } else {
-                        alert('❌ Błąd: ' + result.message);
-                    }
-                } catch (error) {
-                    alert('❌ Nie można uruchomić optymalizatora cen: ' + error);
-                }
-            }
-        }
-
-        async function startVintedAutomation() {
-            if (confirm('Uruchomić automatyzację Vinted?\n\nUWAGA: Upewnij się, że:\n- Chrome jest uruchomiony z debug portem\n- Jesteś zalogowany na Vinted\n- Masz ogłoszenia gotowe do publikacji')) {
-                try {
-                    const response = await fetch('/api/vinted/automate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        alert('✅ Automatyzacja Vinted uruchomiona!\n\nSprawdź konsole w terminalu, aby śledzić postęp.');
-                    } else {
-                        alert('❌ Błąd: ' + result.message);
-                    }
-                } catch (error) {
-                    alert('❌ Nie można uruchomić automatyzacji: ' + error);
-                }
             }
         }
 

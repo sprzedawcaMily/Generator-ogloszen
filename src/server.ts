@@ -268,46 +268,6 @@ async function handleFetch(req: Request) {
             }
         }
 
-        // Endpoint dla optymalizatora cen Vinted
-        if (url.pathname === "/api/vinted/price-optimizer" && req.method === "POST") {
-            try {
-                console.log('💰 Starting Vinted price optimizer from web interface...');
-                
-                // Import dynamiczny
-                const { runPriceOptimization } = await import('./priceOptimizer');
-                
-                // Uruchom optymalizator w tle
-                runPriceOptimization()
-                    .then(() => {
-                        console.log('✅ Vinted price optimization completed successfully');
-                    })
-                    .catch(error => {
-                        console.error('❌ Vinted price optimization failed:', error);
-                    });
-
-                return new Response(JSON.stringify({
-                    success: true,
-                    message: "Vinted price optimizer started. Check console for progress."
-                }), {
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Origin": "*"
-                    }
-                });
-            } catch (error) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    message: "Failed to start price optimizer: " + error
-                }), {
-                    status: 500,
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Origin": "*"
-                    }
-                });
-            }
-        }
-
         // Endpoint do uruchomienia przeglądarki do logowania
         if (url.pathname === "/api/chrome/launch" && req.method === "POST") {
             try {
@@ -698,6 +658,46 @@ async function handleFetch(req: Request) {
                 return new Response(JSON.stringify({
                     success: false,
                     message: "Błąd automatyzacji Grailed: " + error
+                }), {
+                    status: 500,
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+        }
+
+        // Endpoint automatyzacji zmiany cen Vinted
+        if (url.pathname === "/api/vinted/price-automation" && req.method === "POST") {
+            try {
+                const { runVintedPriceAutomationWithExistingBrowser } = await import('./vintedPriceAutomation');
+
+                // Pobierz URL profilu z body żądania
+                const body = await req.json().catch(() => ({}));
+                const profileUrl = body.profileUrl || 'https://www.vinted.pl/member/130445339';
+
+                console.log('🏷️ Uruchamianie automatyzacji zmiany cen Vinted...');
+
+                // Uruchom automatyzację w tle
+                runVintedPriceAutomationWithExistingBrowser(profileUrl)
+                    .then(() => console.log('✅ Vinted price automation completed successfully'))
+                    .catch(err => console.error('❌ Vinted price automation failed:', err));
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    message: "Automatyzacja zmiany cen Vinted została uruchomiona"
+                }), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            } catch (error) {
+                console.error("Vinted price automation error:", error);
+                return new Response(JSON.stringify({
+                    success: false,
+                    message: "Błąd automatyzacji zmiany cen Vinted: " + error
                 }), {
                     status: 500,
                     headers: {

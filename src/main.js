@@ -901,6 +901,43 @@ async function init() {
         grailedAutomationContainer.appendChild(grailedAutomationDescription);
         grailedAutomationContainer.appendChild(grailedButtonRow);
         container.appendChild(grailedAutomationContainer);
+
+        // Add Vinted Price Automation buttons
+        const priceAutomationContainer = document.createElement('div');
+        priceAutomationContainer.className = 'automation-container';
+        priceAutomationContainer.style.cssText = 'margin: 20px 0; text-align: center; padding: 20px; background: #f0fdf4; border-radius: 12px; border: 2px solid #22c55e;';
+        
+        const priceAutomationTitle = document.createElement('h3');
+        priceAutomationTitle.textContent = '💰 Automatyzacja Zmiany Cen Vinted';
+        priceAutomationTitle.style.cssText = 'margin: 0 0 10px 0; color: #16a34a;';
+        
+        const priceAutomationDescription = document.createElement('p');
+        priceAutomationDescription.textContent = 'Krok 1: Uruchom przeglądarkę i zaloguj się do Vinted. Krok 2: Uruchom automatyzację obniżania cen o 25%.';
+        priceAutomationDescription.style.cssText = 'margin: 0 0 15px 0; color: #64748b; font-size: 14px;';
+        
+        const priceButtonRow = document.createElement('div');
+        priceButtonRow.style.cssText = 'display: flex; gap: 12px; justify-content: center; align-items: center;';
+        
+        // Launch Chrome for Price automation button
+        const launchPriceChromeButton = document.createElement('button');
+        launchPriceChromeButton.textContent = '🚀 Uruchom przeglądarkę';
+        launchPriceChromeButton.className = 'automation-btn launch-price-chrome-btn';
+        launchPriceChromeButton.style.cssText = 'background: #16a34a; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
+        launchPriceChromeButton.onclick = () => launchChromeForLogin();
+        priceButtonRow.appendChild(launchPriceChromeButton);
+        
+        // Price automation button
+        const priceAutomationButton = document.createElement('button');
+        priceAutomationButton.textContent = '💰 Uruchom automatyzację cen';
+        priceAutomationButton.className = 'automation-btn price-automation-btn';
+        priceAutomationButton.style.cssText = 'background: #15803d; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
+        priceAutomationButton.onclick = () => runVintedPriceAutomation();
+        priceButtonRow.appendChild(priceAutomationButton);
+        
+        priceAutomationContainer.appendChild(priceAutomationTitle);
+        priceAutomationContainer.appendChild(priceAutomationDescription);
+        priceAutomationContainer.appendChild(priceButtonRow);
+        container.appendChild(priceAutomationContainer);
         
         // Create and append advertisement cards
         for (let i = 0; i < data.advertisements.length; i++) {
@@ -1216,6 +1253,34 @@ async function connectGrailedAutomation() {
     } catch (error) {
         console.error('Error connecting Grailed automation:', error);
         showMessage('❌ Błąd automatyzacji Grailed: ' + error.message);
+    }
+}
+
+// Function to run Vinted price automation
+async function runVintedPriceAutomation() {
+    try {
+        showMessage('💰 Uruchamiam automatyzację zmiany cen Vinted...');
+        
+        const response = await fetch('/api/vinted/price-automation', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                profileUrl: 'https://www.vinted.pl/member/130445339'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showMessage('✅ ' + result.message);
+        } else {
+            showMessage('❌ ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error running Vinted price automation:', error);
+        showMessage('❌ Błąd automatyzacji cen Vinted: ' + error.message);
     }
 }
 

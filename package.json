@@ -4,23 +4,38 @@
   "scripts": {
     "dev": "bun run src/dev.ts",
     "build": "bun build src/main.ts --outdir dist",
+    "start": "expo start",
+    "android": "expo start --android",
+    "build:android": "eas build --platform android",
+    "build:android:apk": "eas build --platform android --profile production-apk",
+    "build:android:aab": "eas build --platform android --profile production",
     "vinted": "bun run run-vinted-automation.ts",
     "vinted-existing": "bun run start-vinted-existing.ts",
     "direct": "bun run run-vinted-direct.ts",
+    "vinted-price": "bun run run-vinted-price-automation.ts",
     "chrome": "powershell -Command \"Write-Host '🚀 Uruchamiam Chrome...' -ForegroundColor Green; Stop-Process -Name chrome -Force -ErrorAction SilentlyContinue; Start-Sleep 2; if(!(Test-Path 'C:\\temp\\chrome-debug')){New-Item -Path 'C:\\temp\\chrome-debug' -ItemType Directory -Force | Out-Null}; Start-Process 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' -ArgumentList '--remote-debugging-port=9222','--user-data-dir=C:\\temp\\chrome-debug','--no-first-run','--no-default-browser-check','https://www.vinted.pl'; Write-Host '✅ Chrome uruchomiony! Zaloguj się na Vinted i uruchom: bun run direct' -ForegroundColor Yellow\"",
     "test-photos": "bun run test-photo-upload.ts",
     "debug-vinted": "bun run debug-vinted.ts",
     "debug-photos": "bun run debug-photo-upload.ts",
-    "chrome-debug": "powershell -ExecutionPolicy Bypass -File start-chrome-debug.ps1",
-    "price-optimizer": "bun run run-price-optimizer.ts"
+    "chrome-debug": "powershell -ExecutionPolicy Bypass -File start-chrome-debug.ps1"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.4",
+    "babel-preset-expo": "^10.0.0",
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@expo/vector-icons": "^14.0.0",
     "@supabase/supabase-js": "^2.56.1",
     "@types/puppeteer": "^7.0.4",
+    "expo": "~50.0.20",
+    "expo-constants": "~15.4.6",
+    "expo-font": "~11.10.3",
+    "expo-image-picker": "~14.7.1",
+    "expo-status-bar": "~1.11.1",
     "puppeteer": "^24.17.1",
+    "react": "18.2.0",
+    "react-native": "0.73.6",
     "sharp": "^0.34.3"
   }
 }
