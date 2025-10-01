@@ -161,6 +161,12 @@ Przykład:
         // Poczekaj na załadowanie ogłoszeń
         await new Promise(resolve => setTimeout(resolve, 3000));
         
+        // Sprawdź czy nie ma captcha na profilu
+        const hasCaptchaOnProfile = await this.checkForCaptcha();
+        if (hasCaptchaOnProfile) {
+            await this.waitForCaptchaResolution();
+        }
+        
         // Kliknij filtr "Aktywne" aby pokazać tylko aktywne ogłoszenia
         console.log('🔍 Szukam filtru "Aktywne"...');
         try {
@@ -376,6 +382,148 @@ Przykład:
         return advertisements;
     }
 
+    async checkForCaptcha(): Promise<boolean> {
+        if (!this.page) throw new Error('Page not initialized');
+
+        try {
+            // Sprawdź czy istnieje element captcha
+            const captchaSelectors = [
+                '#ddv1-captcha-container',
+                '.captcha__ddv1',
+                '[data-dd-ddv1-captcha-container]',
+                '#captcha__frame',
+                '.captcha__puzzle',
+                '.sliderContainer'
+            ];
+
+            for (const selector of captchaSelectors) {
+                const captchaElement = await this.page.$(selector);
+                if (captchaElement) {
+                    // Sprawdź czy element jest widoczny
+                    const isVisible = await this.page.evaluate((element) => {
+                        const style = window.getComputedStyle(element);
+                        const htmlElement = element as HTMLElement;
+                        return style.display !== 'none' && style.visibility !== 'hidden' && htmlElement.offsetHeight > 0;
+                    }, captchaElement);
+
+                    if (isVisible) {
+                        console.log('🤖 Wykryto CAPTCHA na stronie!');
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } catch (error) {
+            // Jeśli wystąpi błąd podczas sprawdzania, zakładamy że captcha nie ma
+            return false;
+        }
+    }
+
+    async waitForCaptchaResolution(): Promise<void> {
+        if (!this.page) throw new Error('Page not initialized');
+
+        console.log('');
+        console.log('🛑 ========================================');
+        console.log('🤖 WYKRYTO CAPTCHA!');
+        console.log('🛑 ========================================');
+        console.log('');
+        console.log('⚠️  INSTRUKCJA:');
+        console.log('   1. Przejdź do okna przeglądarki Chrome');
+        console.log('   2. Rozwiąż captcha (przeciągnij suwak lub audio)');
+        console.log('   3. Poczekaj aż strona się załaduje');
+        console.log('   4. Automatyzacja zostanie wznowiona automatycznie');
+        console.log('');
+        console.log('⏳ Czekam na rozwiązanie captcha...');
+        console.log('   (sprawdzam co 5 sekund)');
+        console.log('');
+
+        let attempts = 0;
+        const maxAttempts = 120; // 10 minut maksymalnie (120 * 5s = 600s)
+
+        while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Czekaj 5 sekund
+            attempts++;
+
+            const hasCaptcha = await this.checkForCaptcha();
+            
+            if (!hasCaptcha) {
+                console.log('✅ Captcha rozwiązana! Wznawianie automatyzacji...');
+                console.log('');
+                await new Promise(resolve => setTimeout(resolve, 3000)); // Dodatkowe 3s na załadowanie
+                return;
+            }
+
+            if (attempts % 6 === 0) { // Co 30 sekund (6 * 5s)
+                const remainingMinutes = Math.ceil((maxAttempts - attempts) * 5 / 60);
+                console.log(`⏱️  Wciąż czekam na captcha... (pozostało ~${remainingMinutes} min)`);
+            }
+        }
+
+        // Timeout - za długo czekamy
+        console.log('');
+        console.log('⚠️ TIMEOUT: Zbyt długo czekam na rozwiązanie captcha');
+        console.log('   Sprawdź czy captcha została rozwiązana i spróbuj ponownie');
+        throw new Error('Timeout podczas oczekiwania na rozwiązanie captcha');
+    }
+
+    async navigateWithCaptchaHandling(url: string, maxRetries: number = 3): Promise<boolean> {
+        if (!this.page) throw new Error('Page not initialized');
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`🔄 Próba nawigacji ${attempt}/${maxRetries} do: ${url}`);
+                
+                await this.page.goto(url, { 
+                    waitUntil: 'networkidle2',
+                    timeout: 20000  // Skrócony timeout dla szybszej responsywności
+                });
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Sprawdź czy nie ma captcha po nawigacji
+                const hasCaptcha = await this.checkForCaptcha();
+                if (hasCaptcha) {
+                    console.log('🤖 Wykryto captcha po nawigacji - oczekuję na rozwiązanie...');
+                    await this.waitForCaptchaResolution();
+                }
+                
+                console.log(`✅ Nawigacja pomyślna do: ${url}`);
+                return true;
+                
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                console.log(`⚠️ Błąd nawigacji (próba ${attempt}/${maxRetries}): ${errorMessage}`);
+                
+                // Sprawdź czy może to być captcha mimo błędu
+                try {
+                    const hasCaptcha = await this.checkForCaptcha();
+                    if (hasCaptcha) {
+                        console.log('🤖 Wykryto captcha mimo błędu nawigacji - oczekuję na rozwiązanie...');
+                        await this.waitForCaptchaResolution();
+                        
+                        // Po rozwiązaniu captcha spróbuj ponownie nawigować
+                        console.log('🔄 Próbuję ponowną nawigację po rozwiązaniu captcha...');
+                        continue;
+                    }
+                } catch (captchaError) {
+                    console.log('⚠️ Błąd podczas sprawdzania captcha:', captchaError);
+                }
+                
+                if (attempt === maxRetries) {
+                    console.log(`❌ Nie udało się nawigować po ${maxRetries} próbach`);
+                    throw error;
+                }
+                
+                // Przerwa przed kolejną próbą
+                const waitTime = attempt * 3000; // 3s, 6s, 9s
+                console.log(`⏳ Czekam ${waitTime/1000}s przed kolejną próbą...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+        }
+        
+        return false;
+    }
+
     async processAdvertisement(ad: {id: string, url: string, currentPrice: string}, discount: number = 25): Promise<boolean> {
         if (!this.page) throw new Error('Page not initialized');
 
@@ -384,96 +532,75 @@ Przykład:
             console.log(`🔗 URL: ${ad.url}`);
             console.log(`💰 Aktualna cena: ${ad.currentPrice} zł`);
 
-            // Przejdź do ogłoszenia
-            await this.page.goto(ad.url, { waitUntil: 'networkidle2' });
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Przejdź bezpośrednio do strony edycji (optymalizacja - bez szukania przycisku)
+            console.log('🔄 Przechodzę bezpośrednio do strony edycji...');
+            const editUrl = ad.url.replace(/\/items\/(\d+)/, '/items/$1/edit');
+            console.log(`� URL edycji: ${editUrl}`);
+            
+            const editNavigationSuccess = await this.navigateWithCaptchaHandling(editUrl);
+            if (!editNavigationSuccess) {
+                console.log('❌ Nie udało się przejść bezpośrednio do strony edycji');
+                
+                // Fallback: spróbuj tradycyjnej metody (przejdź do ogłoszenia i znajdź przycisk)
+                console.log('🔄 Próbuję alternatywnej metody - przejście do ogłoszenia i szukanie przycisku...');
+                const navigationSuccess = await this.navigateWithCaptchaHandling(ad.url);
+                if (!navigationSuccess) {
+                    console.log('❌ Nie udało się przejść do ogłoszenia');
+                    return false;
+                }
 
-            // Znajdź i kliknij przycisk "Edytuj ogłoszenie"
-            console.log('🔍 Szukam przycisku "Edytuj ogłoszenie"...');
-            
-            const editButtonSelector = 'button[data-testid="item-edit-button"]';
-            
-            // Poczekaj na załadowanie przycisku
-            await this.page.waitForSelector(editButtonSelector, { timeout: 10000 });
-            
-            // Poczekaj dodatkowe 2 sekundy na pełne załadowanie
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            console.log('✅ Znaleziono przycisk "Edytuj ogłoszenie", próbuję kliknąć...');
-            
-            // Spróbuj różne metody klikania
-            let clickSuccess = false;
-            
-            // Metoda 1: Zwykłe kliknięcie
-            try {
-                await this.page.click(editButtonSelector);
-                clickSuccess = true;
-                console.log('✅ Kliknięto przycisk metodą standardową');
-            } catch (error) {
-                console.log('⚠️ Standardowe kliknięcie nie powiodło się, próbuję alternatywne metody...');
-            }
-            
-            // Metoda 2: Kliknięcie z przewijaniem do elementu
-            if (!clickSuccess) {
+                // Znajdź i kliknij przycisk "Edytuj ogłoszenie"
+                console.log('🔍 Szukam przycisku "Edytuj ogłoszenie"...');
+                
+                const editButtonSelector = 'button[data-testid="item-edit-button"]';
+                
                 try {
-                    const element = await this.page.$(editButtonSelector);
-                    if (element) {
-                        await element.scrollIntoView();
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        await element.click();
-                        clickSuccess = true;
-                        console.log('✅ Kliknięto przycisk po przewinięciu');
+                    // Poczekaj na załadowanie przycisku
+                    await this.page.waitForSelector(editButtonSelector, { timeout: 10000 });
+                    
+                    // Poczekaj dodatkowe 2 sekundy na pełne załadowanie
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Sprawdź czy nie ma captcha przed kliknięciem
+                    const hasCaptchaBeforeEdit = await this.checkForCaptcha();
+                    if (hasCaptchaBeforeEdit) {
+                        await this.waitForCaptchaResolution();
                     }
+                    
+                    console.log('✅ Znaleziono przycisk "Edytuj ogłoszenie", klikam...');
+                    await this.page.click(editButtonSelector);
+                    
                 } catch (error) {
-                    console.log('⚠️ Kliknięcie po przewinięciu nie powiodło się...');
+                    console.log('❌ Nie udało się znaleźć lub kliknąć przycisku edycji');
+                    return false;
                 }
-            }
-            
-            // Metoda 3: Kliknięcie przez JavaScript
-            if (!clickSuccess) {
-                try {
-                    await this.page.evaluate((selector) => {
-                        const button = document.querySelector(selector);
-                        if (button) {
-                            (button as HTMLButtonElement).click();
-                            return true;
-                        }
-                        return false;
-                    }, editButtonSelector);
-                    clickSuccess = true;
-                    console.log('✅ Kliknięto przycisk przez JavaScript');
-                } catch (error) {
-                    console.log('⚠️ Kliknięcie przez JavaScript nie powiodło się...');
-                }
-            }
-            
-            // Metoda 4: Bezpośrednie przejście do URL edycji
-            if (!clickSuccess) {
-                console.log('🔄 Próbuję bezpośredniego przejścia do strony edycji...');
-                const editUrl = ad.url.replace(/\/items\/(\d+)/, '/items/$1/edit');
-                await this.page.goto(editUrl, { waitUntil: 'networkidle2' });
-                clickSuccess = true;
+            } else {
                 console.log('✅ Przeszedłem bezpośrednio do strony edycji');
-            }
-            
-            if (!clickSuccess) {
-                throw new Error('Nie udało się otworzyć strony edycji ogłoszenia');
             }
             
             // Poczekaj na załadowanie strony edycji
             console.log('⏳ Czekam na załadowanie strony edycji...');
-            await new Promise(resolve => setTimeout(resolve, 4000));
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Skrócony czas oczekiwania
 
             // Sprawdź czy jesteś na stronie edycji
             const currentUrl = this.page.url();
             if (!currentUrl.includes('/edit')) {
                 console.log('⚠️ Nie udało się przejść do strony edycji, próbuję ponownie...');
                 const editUrl = ad.url.replace(/\/items\/(\d+)/, '/items/$1/edit');
-                await this.page.goto(editUrl, { waitUntil: 'networkidle2' });
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                const fallbackNavigationSuccess = await this.navigateWithCaptchaHandling(editUrl);
+                if (!fallbackNavigationSuccess) {
+                    console.log('❌ Nie udało się przejść do strony edycji nawet po ponownej próbie');
+                    return false;
+                }
             }
 
             console.log(`📍 Aktualny URL: ${this.page.url()}`);
+
+            // Sprawdź czy nie ma captcha na stronie edycji
+            const hasCaptchaOnEdit = await this.checkForCaptcha();
+            if (hasCaptchaOnEdit) {
+                await this.waitForCaptchaResolution();
+            }
 
             // Znajdź pole ceny
             console.log('🔍 Szukam pola ceny...');

@@ -161,6 +161,12 @@ Przykład:
         // Poczekaj na załadowanie ogłoszeń
         await new Promise(resolve => setTimeout(resolve, 3000));
         
+        // Sprawdź czy nie ma captcha na profilu
+        const hasCaptchaOnProfile = await this.checkForCaptcha();
+        if (hasCaptchaOnProfile) {
+            await this.waitForCaptchaResolution();
+        }
+        
         // Kliknij filtr "Aktywne" aby pokazać tylko aktywne ogłoszenia
         console.log('🔍 Szukam filtru "Aktywne"...');
         try {
@@ -376,6 +382,90 @@ Przykład:
         return advertisements;
     }
 
+    async checkForCaptcha(): Promise<boolean> {
+        if (!this.page) throw new Error('Page not initialized');
+
+        try {
+            // Sprawdź czy istnieje element captcha
+            const captchaSelectors = [
+                '#ddv1-captcha-container',
+                '.captcha__ddv1',
+                '[data-dd-ddv1-captcha-container]',
+                '#captcha__frame',
+                '.captcha__puzzle',
+                '.sliderContainer'
+            ];
+
+            for (const selector of captchaSelectors) {
+                const captchaElement = await this.page.$(selector);
+                if (captchaElement) {
+                    // Sprawdź czy element jest widoczny
+                    const isVisible = await this.page.evaluate((element) => {
+                        const style = window.getComputedStyle(element);
+                        const htmlElement = element as HTMLElement;
+                        return style.display !== 'none' && style.visibility !== 'hidden' && htmlElement.offsetHeight > 0;
+                    }, captchaElement);
+
+                    if (isVisible) {
+                        console.log('🤖 Wykryto CAPTCHA na stronie!');
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } catch (error) {
+            // Jeśli wystąpi błąd podczas sprawdzania, zakładamy że captcha nie ma
+            return false;
+        }
+    }
+
+    async waitForCaptchaResolution(): Promise<void> {
+        if (!this.page) throw new Error('Page not initialized');
+
+        console.log('');
+        console.log('🛑 ========================================');
+        console.log('🤖 WYKRYTO CAPTCHA!');
+        console.log('🛑 ========================================');
+        console.log('');
+        console.log('⚠️  INSTRUKCJA:');
+        console.log('   1. Przejdź do okna przeglądarki Chrome');
+        console.log('   2. Rozwiąż captcha (przeciągnij suwak lub audio)');
+        console.log('   3. Poczekaj aż strona się załaduje');
+        console.log('   4. Automatyzacja zostanie wznowiona automatycznie');
+        console.log('');
+        console.log('⏳ Czekam na rozwiązanie captcha...');
+        console.log('   (sprawdzam co 5 sekund)');
+        console.log('');
+
+        let attempts = 0;
+        const maxAttempts = 120; // 10 minut maksymalnie (120 * 5s = 600s)
+
+        while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Czekaj 5 sekund
+            attempts++;
+
+            const hasCaptcha = await this.checkForCaptcha();
+            
+            if (!hasCaptcha) {
+                console.log('✅ Captcha rozwiązana! Wznawianie automatyzacji...');
+                console.log('');
+                await new Promise(resolve => setTimeout(resolve, 3000)); // Dodatkowe 3s na załadowanie
+                return;
+            }
+
+            if (attempts % 6 === 0) { // Co 30 sekund (6 * 5s)
+                const remainingMinutes = Math.ceil((maxAttempts - attempts) * 5 / 60);
+                console.log(`⏱️  Wciąż czekam na captcha... (pozostało ~${remainingMinutes} min)`);
+            }
+        }
+
+        // Timeout - za długo czekamy
+        console.log('');
+        console.log('⚠️ TIMEOUT: Zbyt długo czekam na rozwiązanie captcha');
+        console.log('   Sprawdź czy captcha została rozwiązana i spróbuj ponownie');
+        throw new Error('Timeout podczas oczekiwania na rozwiązanie captcha');
+    }
+
     async processAdvertisement(ad: {id: string, url: string, currentPrice: string}, discount: number = 25): Promise<boolean> {
         if (!this.page) throw new Error('Page not initialized');
 
@@ -388,6 +478,12 @@ Przykład:
             await this.page.goto(ad.url, { waitUntil: 'networkidle2' });
             await new Promise(resolve => setTimeout(resolve, 2000));
 
+            // Sprawdź czy nie ma captcha
+            const hasCaptcha = await this.checkForCaptcha();
+            if (hasCaptcha) {
+                await this.waitForCaptchaResolution();
+            }
+
             // Znajdź i kliknij przycisk "Edytuj ogłoszenie"
             console.log('🔍 Szukam przycisku "Edytuj ogłoszenie"...');
             
@@ -398,6 +494,12 @@ Przykład:
             
             // Poczekaj dodatkowe 2 sekundy na pełne załadowanie
             await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Sprawdź czy nie ma captcha przed kliknięciem
+            const hasCaptchaBeforeEdit = await this.checkForCaptcha();
+            if (hasCaptchaBeforeEdit) {
+                await this.waitForCaptchaResolution();
+            }
             
             console.log('✅ Znaleziono przycisk "Edytuj ogłoszenie", próbuję kliknąć...');
             
@@ -474,6 +576,12 @@ Przykład:
             }
 
             console.log(`📍 Aktualny URL: ${this.page.url()}`);
+
+            // Sprawdź czy nie ma captcha na stronie edycji
+            const hasCaptchaOnEdit = await this.checkForCaptcha();
+            if (hasCaptchaOnEdit) {
+                await this.waitForCaptchaResolution();
+            }
 
             // Znajdź pole ceny
             console.log('🔍 Szukam pola ceny...');
