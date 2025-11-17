@@ -50,6 +50,7 @@ export class GrailedAutomation {
     private page: Page | null = null;
     private tempDir = path.join(process.cwd(), 'temp', 'grailed-photos');
     private logger: Logger;
+    private userId?: string;
 
     constructor() {
         this.logger = Logger.getInstance();
@@ -100,6 +101,22 @@ export class GrailedAutomation {
         await delay(5000);
         
         await this.logger.info('✅ Photo loading verification completed');
+    }
+
+    async cleanupTempFiles() {
+        try {
+            await this.logger.info('🧹 Cleaning up temporary files...');
+            if (fs.existsSync(this.tempDir)) {
+                const files = fs.readdirSync(this.tempDir);
+                for (const file of files) {
+                    const filePath = path.join(this.tempDir, file);
+                    fs.unlinkSync(filePath);
+                }
+                await this.logger.success(`✅ Cleaned up ${files.length} temporary files`);
+            }
+        } catch (error) {
+            await this.logger.warn('⚠️  Error cleaning up temp files:', error);
+        }
     }
 
     // Function to get Grailed category mapping with subcategories
@@ -1456,16 +1473,16 @@ export class GrailedAutomation {
 
     // Fill description field
     // Generate description using the same logic as Vinted automation
-    async generateDescription(ad: Advertisement): Promise<string> {
+    async generateDescription(ad: Advertisement, userId?: string): Promise<string> {
         let description = '';
         
         try {
             // Fetch styles and description headers
             const [styles, descriptionHeaders, specificStyle] = await Promise.all([
-                fetchStyles(),
+                fetchStyles(userId),
                 // Use platform-specific headers for Grailed
-                fetchDescriptionHeaders('grailed'),
-                fetchStyleByType(ad.typ)
+                fetchDescriptionHeaders('grailed', userId),
+                fetchStyleByType(ad.typ, userId)
             ]);
             
             const styleToUse = specificStyle || (styles && styles.length > 0 ? styles[0] : null);
@@ -1657,7 +1674,7 @@ export class GrailedAutomation {
         
         try {
             // Generate description using the same logic as Vinted automation
-            const description = await this.generateDescription(ad);
+            const description = await this.generateDescription(ad, this.userId);
             
             console.log(`🎯 Generated Vinted-style description:\n${description.substring(0, 500)}...`);
             

@@ -40,6 +40,7 @@ export class VintedAutomation {
     private browser: Browser | null = null;
     private page: Page | null = null;
     private tempDir = path.join(process.cwd(), 'temp', 'photos');
+    private userId?: string;
 
     // Function to get shortened version of product type (copied from main.js)
     getShortenedProductType(rodzaj: string): string {
@@ -144,16 +145,16 @@ export class VintedAutomation {
     }
 
     // Generuj opis według wzorca z main.js z emoji i formatowaniem
-    async generateDescription(ad: Advertisement): Promise<string> {
+    async generateDescription(ad: Advertisement, userId?: string): Promise<string> {
         let description = '';
         
         try {
             // Pobierz style i nagłówki opisów
             const [styles, descriptionHeaders, specificStyle] = await Promise.all([
-                fetchStyles(),
+                fetchStyles(userId),
                 // Use platform-specific headers for Vinted
-                fetchDescriptionHeaders('vinted'),
-                fetchStyleByType(ad.typ)
+                fetchDescriptionHeaders('vinted', userId),
+                fetchStyleByType(ad.typ, userId)
             ]);
             
             const styleToUse = specificStyle || (styles && styles.length > 0 ? styles[0] : null);
@@ -269,7 +270,7 @@ export class VintedAutomation {
         return {
             ...ad,
             title: await this.generateTitle(ad),
-            description: await this.generateDescription(ad),
+            description: await this.generateDescription(ad, this.userId),
             photos: ad.photo_uris || []
         };
     }
@@ -3542,7 +3543,60 @@ export class VintedAutomation {
             // Oznacz ogłoszenie jako opublikowane do Vinted
             console.log('📝 Marking advertisement as published to Vinted...');
             
-            const { updateVintedPublishStatus } = await import('./supabaseFetcher');
+            // Czekaj na przekierowanie do strony użytkownika
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // Pobierz URL pierwszego ogłoszenia z listy (najnowsze - właśnie dodane)
+            let vintedItemUrl = null;
+            try {
+                console.log('🔍 Searching for the newest advertisement URL...');
+                
+                // Znajdź pierwszy element ogłoszenia z linkiem do edycji
+                vintedItemUrl = await this.page.evaluate(() => {
+                    // Szukaj pierwszego elementu z data-testid="grid-item"
+                    const firstItem = document.querySelector('[data-testid="grid-item"]');
+                    if (!firstItem) return null;
+                    
+                    // Szukaj linku do edycji w formacie /items/[ID]/edit
+                    const editLink = firstItem.querySelector('a[href*="/items/"][href*="/edit"]');
+                    if (!editLink) return null;
+                    
+                    const href = editLink.getAttribute('href');
+                    if (!href) return null;
+                    
+                    // Przekształć /items/7579749349/edit na https://www.vinted.pl/items/7579749349
+                    const match = href.match(/\/items\/(\d+)/);
+                    if (match && match[1]) {
+                        return `https://www.vinted.pl/items/${match[1]}`;
+                    }
+                    
+                    return null;
+                });
+                
+                if (vintedItemUrl) {
+                    console.log(`✅ Found advertisement URL: ${vintedItemUrl}`);
+                } else {
+                    console.log('⚠️  Could not extract advertisement URL from page');
+                }
+            } catch (error) {
+                console.error('❌ Error extracting Vinted URL:', error);
+            }
+            
+            const { updateVintedPublishStatus, saveVintedUrl } = await import('./supabaseFetcher');
+            
+            // Zapisz URL do bazy danych jeśli udało się go pobrać
+            if (vintedItemUrl) {
+                const urlResult = await saveVintedUrl(advertisementId, vintedItemUrl);
+                if (urlResult.success) {
+                    console.log('✅ Vinted URL saved to database');
+                } else {
+                    console.log('⚠️  Failed to save Vinted URL to database');
+                }
+            } else {
+                console.log('⚠️  Skipping URL save - URL not found');
+            }
+            
+            // Oznacz jako opublikowane
             const success = await updateVintedPublishStatus(advertisementId, true);
             
             if (success) {
@@ -3727,6 +3781,9 @@ export class VintedAutomation {
 
     async startWithExistingBrowser(userId?: string) {
         try {
+            // Store userId for later use
+            this.userId = userId;
+            
             console.log('🚀 Starting Vinted automation with existing browser...');
             console.log('🔍 Sprawdzanie połączenia z Chrome...');
             
@@ -3802,6 +3859,9 @@ export class VintedAutomation {
                         await this.processAdvertisement(ad);
                         console.log(`✅ Advertisement ${i + 1} completed successfully!`);
                         
+                        // Wyczyść tymczasowe zdjęcia po przetworzeniu ogłoszenia
+                        await this.cleanupTempFiles();
+                        
                         // Jeśli to nie ostatnie ogłoszenie, przygotuj się do następnego
                         if (i < advertisements.length - 1) {
                             console.log('\n🔄 Preparing for next advertisement...');
@@ -3852,6 +3912,9 @@ export class VintedAutomation {
 
     async start(userId?: string) {
         try {
+            // Store userId for later use
+            this.userId = userId;
+            
             console.log('🚀 Starting Vinted automation...');
             
             // Inicjalizuj przeglądarkę

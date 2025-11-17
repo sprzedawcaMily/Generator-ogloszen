@@ -210,13 +210,19 @@ export async function fetchUnpublishedToGrailedAdvertisements(userId?: string) {
     }
 }
 
-export async function fetchStyles() {
+export async function fetchStyles(userId?: string) {
     try {
-        const { data, error } = await supabase
+        let query: any = supabase
             .from('style_templates')
             .select('*')
             .eq('is_active', true)
             .order('order_index', { ascending: true });
+
+        if (userId) {
+            query = query.eq('user_id', userId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching styles:', error);
@@ -230,36 +236,41 @@ export async function fetchStyles() {
     }
 }
 
-export async function fetchStyleByType(productType: string) {
+export async function fetchStyleByType(productType: string, userId?: string) {
     try {
         // Handle null, undefined, or empty product types
         if (!productType || productType.trim() === '') {
             console.log('⚠️ No product type provided, using fallback style');
-            return await fetchStyles().then(styles => styles[0] || null);
+            return await fetchStyles(userId).then(styles => styles[0] || null);
         }
 
-        const { data, error } = await supabase
+        let query: any = supabase
             .from('style_templates')
             .select('*')
             .eq('is_active', true)
-            .eq('style_name', productType)
-            .single();
+            .eq('style_name', productType);
+
+        if (userId) {
+            query = query.eq('user_id', userId);
+        }
+
+        const { data, error } = await query.single();
 
         if (error) {
             console.log(`⚠️ No specific style found for type "${productType}", using fallback style`);
             // Fallback to first active style if no specific type found
-            return await fetchStyles().then(styles => styles[0] || null);
+            return await fetchStyles(userId).then(styles => styles[0] || null);
         }
 
         return data;
     } catch (error) {
         console.error('Error in fetchStyleByType:', error);
         // Fallback to first active style if no specific type found
-        return await fetchStyles().then(styles => styles[0] || null);
+        return await fetchStyles(userId).then(styles => styles[0] || null);
     }
 }
 
-export async function fetchDescriptionHeaders(platform?: string) {
+export async function fetchDescriptionHeaders(platform?: string, userId?: string) {
     try {
         let query: any = supabase
             .from('description_headers')
@@ -269,6 +280,10 @@ export async function fetchDescriptionHeaders(platform?: string) {
 
         if (platform) {
             query = query.eq('platform', platform);
+        }
+
+        if (userId) {
+            query = query.eq('user_id', userId);
         }
 
         const { data, error } = await query;
@@ -532,6 +547,27 @@ export async function toggleGrailedPublishStatus(advertisementId: string) {
         };
     } catch (error) {
         console.error('Error in toggleGrailedPublishStatus:', error);
+        return { success: false, message: 'Błąd serwera' };
+    }
+}
+
+// Save Vinted URL to database
+export async function saveVintedUrl(advertisementId: string, vintedUrl: string) {
+    try {
+        const { error } = await supabase
+            .from('advertisements')
+            .update({ Vinted_URL: vintedUrl })
+            .eq('id', advertisementId);
+
+        if (error) {
+            console.error('Error saving Vinted URL:', error);
+            return { success: false, message: 'Błąd zapisywania URL Vinted' };
+        }
+
+        console.log(`✅ Vinted URL saved for advertisement ${advertisementId}: ${vintedUrl}`);
+        return { success: true };
+    } catch (error) {
+        console.error('Error in saveVintedUrl:', error);
         return { success: false, message: 'Błąd serwera' };
     }
 }

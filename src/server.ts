@@ -460,7 +460,9 @@ async function handleFetch(req: Request) {
 
         // Endpoint dla stylów z Supabase
         if (url.pathname === "/api/styles") {
-            const data = await fetchStyles();
+            const userId = getUserIdFromReq(req);
+            console.log('Fetching /api/styles for userId=', userId);
+            const data = await fetchStyles(userId || undefined);
             return new Response(JSON.stringify(data), {
                 headers: {
                     "Content-Type": "application/json",
@@ -471,10 +473,11 @@ async function handleFetch(req: Request) {
 
         // Endpoint dla stylu według typu produktu
         if (url.pathname.startsWith("/api/styles/") && url.pathname !== "/api/styles") {
+            const userId = getUserIdFromReq(req);
             const productType = decodeURIComponent(url.pathname.split("/").pop() || "");
-            console.log(`Searching for style with name: "${productType}"`);
+            console.log(`Searching for style with name: "${productType}" for userId=${userId}`);
             if (productType) {
-                const data = await fetchStyleByType(productType);
+                const data = await fetchStyleByType(productType, userId || undefined);
                 console.log(`Found style data:`, data);
                 return new Response(JSON.stringify(data), {
                     headers: {
@@ -487,8 +490,10 @@ async function handleFetch(req: Request) {
 
         // Endpoint dla nagłówków opisów z Supabase
         if (url.pathname === "/api/description-headers") {
+            const userId = getUserIdFromReq(req);
             const platform = url.searchParams.get('platform') || undefined;
-            const data = await fetchDescriptionHeaders(platform);
+            console.log('Fetching /api/description-headers for userId=', userId, 'platform=', platform);
+            const data = await fetchDescriptionHeaders(platform, userId || undefined);
             return new Response(JSON.stringify(data), {
                 headers: {
                     "Content-Type": "application/json",

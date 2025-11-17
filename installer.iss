@@ -36,7 +36,7 @@ Name: "polish"; MessagesFile: "compiler:Languages\Polish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "node_modules,installer-output,.git,dist,build,*.log,.expo"
+Source: "*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "node_modules,installer-output,.git,dist,build,*.log,.expo,temp"
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
