@@ -1,12 +1,13 @@
-import { supabase } from './src/supabaseClient';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { firebaseApp } from './src/firebaseConfig';
 
 async function checkPodkoszulki() {
+    const db = getFirestore(firebaseApp);
     console.log('🔍 Sprawdzam ogłoszenia z podkoszulkami...\n');
-    
-    const { data } = await supabase
-        .from('advertisements')
-        .select('*')
-        .ilike('rodzaj', '%podkoszul%');
+
+    const snap = await getDocs(collection(db, 'advertisements'));
+    const allAds = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const data = allAds.filter((ad) => String(ad.rodzaj || '').toLowerCase().includes('podkoszul'));
     
     if (data && data.length > 0) {
         console.log(`📊 Znalezione ogłoszenia z podkoszulkami (${data.length}):`);
@@ -19,10 +20,12 @@ async function checkPodkoszulki() {
     
     // Sprawdźmy też podobne nazwy
     console.log('\n🔍 Sprawdzam podobne kategorie...');
-    const { data: similar } = await supabase
-        .from('advertisements')
-        .select('rodzaj')
-        .or('rodzaj.ilike.%koszul%,rodzaj.ilike.%shirt%,rodzaj.ilike.%tank%');
+    const similar = allAds
+        .filter((ad) => {
+            const rodzaj = String(ad.rodzaj || '').toLowerCase();
+            return rodzaj.includes('koszul') || rodzaj.includes('shirt') || rodzaj.includes('tank');
+        })
+        .map((ad) => ({ rodzaj: ad.rodzaj }));
     
     if (similar && similar.length > 0) {
         const uniqueTypes = [...new Set(similar.map(ad => ad.rodzaj))];

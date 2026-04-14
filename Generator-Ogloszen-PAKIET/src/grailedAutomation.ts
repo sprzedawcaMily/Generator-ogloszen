@@ -2480,17 +2480,17 @@ export class GrailedAutomation {
             
             console.log('🚀 Uruchamiam Chrome z debug portem dla Grailed...');
             
-            // Utwórz unikalny katalog dla profilu debug
+            // Użyj stałego katalogu profilu, aby sesja logowania była zapamiętana.
             const { execSync } = await import('child_process');
             const userDir = process.env.USERPROFILE || process.env.HOME || '.';
-            let debugDir = `${userDir}\\AppData\\Local\\Temp\\chrome-debug-grailed-${Date.now()}`;
+            let debugDir = `${userDir}\\AppData\\Local\\Kamochi\\chrome-debug-main-profile`;
             
             try {
                 console.log(`📁 Tworzę katalog debug: ${debugDir}`);
                 execSync(`mkdir "${debugDir}"`, { stdio: 'ignore' });
                 console.log(`✅ Utworzono katalog debug`);
             } catch (error) {
-                debugDir = `.\\chrome-debug-grailed-${Date.now()}`;
+                debugDir = `.\\chrome-debug-main-profile`;
                 try {
                     execSync(`mkdir "${debugDir}"`, { stdio: 'ignore' });
                     console.log(`✅ Utworzono alternatywny katalog: ${debugDir}`);
@@ -2499,25 +2499,8 @@ export class GrailedAutomation {
                     return false;
                 }
             }
-            
-            // Zamknij istniejące procesy Chrome
-            console.log('🔄 Zamykam istniejące procesy Chrome...');
-            try {
-                console.log('⚠️ Zamykam wszystkie procesy Chrome...');
-                execSync('taskkill /F /IM chrome.exe 2>NUL', { stdio: 'ignore' });
-                console.log('✅ Procesy Chrome zamknięte');
-                await new Promise(resolve => setTimeout(resolve, 3000));
-            } catch {
-                console.log('ℹ️ Brak procesów Chrome do zamknięcia');
-            }
-            
-            // Wyczyść port 9222
-            try {
-                console.log('🧹 Czyszczę port 9222...');
-                execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr :9222\') do taskkill /F /PID %a 2>NUL', { stdio: 'ignore' });
-            } catch {
-                console.log('ℹ️ Port 9222 jest wolny');
-            }
+
+            console.log('💾 Używam trwałego profilu Chrome - konto powinno pozostać zalogowane.');
             
             // Uruchom Chrome z grailed.com
             console.log('🚀 Uruchamiam Chrome z grailed.com...');

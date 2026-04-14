@@ -20,14 +20,15 @@
     "chrome-debug": "powershell -ExecutionPolicy Bypass -File start-chrome-debug.ps1"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.11",
     "@babel/core": "^7.28.4",
     "babel-preset-expo": "^10.0.0",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.0",
-    "@supabase/supabase-js": "^2.56.1",
     "@types/puppeteer": "^7.0.4",
+    "firebase": "^11.10.0",
     "expo": "~50.0.20",
     "expo-constants": "~15.4.6",
     "expo-font": "~11.10.3",

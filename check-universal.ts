@@ -1,12 +1,14 @@
-import { supabase } from './src/supabaseClient';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { firebaseApp } from './src/firebaseConfig';
 
 async function checkUniversalSizes() {
+    const db = getFirestore(firebaseApp);
     console.log('🔍 Sprawdzam kategorie z rozmiarem "uniwersalny"...\n');
-    
-    const { data } = await supabase
-        .from('advertisements')
-        .select('rodzaj, rozmiar')
-        .ilike('rozmiar', '%uniwersalny%');
+
+    const snap = await getDocs(collection(db, 'advertisements'));
+    const data = snap.docs
+        .map((d) => d.data() as any)
+        .filter((ad) => String(ad.rozmiar || '').toLowerCase().includes('uniwersalny'));
     
     if (data) {
         console.log('📊 Kategorie z rozmiarem uniwersalny:');

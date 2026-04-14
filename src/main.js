@@ -102,13 +102,14 @@ async function fetchStyleByType(productType) {
     }
 }
 
-// Fetch data from Supabase
-async function fetchSupabaseData() {
+// Fetch data from Firebase
+async function fetchFirebaseData() {
     try {
-        updateDebug('Pobieranie danych z Supabase...');
+        updateDebug('Pobieranie danych z Firebase...');
         
-        const [advertisements, styles, descriptionHeaders] = await Promise.all([
+        const [advertisements, reverseAdvertisements, styles, descriptionHeaders] = await Promise.all([
             fetch('http://localhost:3001/api/advertisements').then(r => r.json()),
+            fetch('http://localhost:3001/api/vinted/reverse-scraped').then(r => r.json()).catch(() => []),
             fetch('http://localhost:3001/api/styles').then(r => r.json()),
             fetch('http://localhost:3001/api/description-headers').then(r => r.json())
         ]);
@@ -117,6 +118,7 @@ async function fetchSupabaseData() {
 
         return {
             advertisements: advertisements || [],
+            reverseAdvertisements: reverseAdvertisements || [],
             styles: styles || [],
             descriptionHeaders: descriptionHeaders || []
         };
@@ -124,6 +126,7 @@ async function fetchSupabaseData() {
         updateDebug(`Błąd podczas pobierania danych: ${error.message}`);
         return {
             advertisements: [],
+            reverseAdvertisements: [],
             styles: [],
             descriptionHeaders: []
         };
@@ -150,7 +153,8 @@ async function fetchExchangeRate() {
 }
 
 // Create a product card from advertisement data
-async function createAdvertisementCard(ad, index, styles) {
+async function createAdvertisementCard(ad, index, styles, options = {}) {
+    const showPublicationButtons = options.showPublicationButtons !== false;
     const card = document.createElement('div');
     // Ustaw klasę CSS na podstawie statusu publikacji na Vinted
     if (ad.is_published_to_vinted) {
@@ -172,17 +176,21 @@ async function createAdvertisementCard(ad, index, styles) {
     const titleElement = document.createElement('div');
     titleElement.className = 'title-preview';
     
-    let title = '';
-    if (ad.marka) title += ad.marka + ' ';
-    if (ad.rodzaj) title += getShortenedProductType(ad.rodzaj) + ' ';
-    if (ad.rozmiar) title += ad.rozmiar + ' ';
-    
-    // Add description_text from style_templates based on product type
-    if (styleToUse && styleToUse.description_text) {
-        title += styleToUse.description_text;
+    if (ad.is_reverse_scraped && ad.title) {
+        titleElement.textContent = ad.title;
+    } else {
+        let title = '';
+        if (ad.marka) title += ad.marka + ' ';
+        if (ad.rodzaj) title += getShortenedProductType(ad.rodzaj) + ' ';
+        if (ad.rozmiar) title += ad.rozmiar + ' ';
+
+        // Add description_text from style_templates based on product type
+        if (styleToUse && styleToUse.description_text) {
+            title += styleToUse.description_text;
+        }
+
+        titleElement.textContent = title.trim();
     }
-    
-    titleElement.textContent = title.trim();
     card.appendChild(titleElement);
 
     // Details
@@ -205,6 +213,11 @@ async function createAdvertisementCard(ad, index, styles) {
     if (measurements.length > 0) {
         details.push(`Wymiary: ${measurements.join(' ')}`);
     }
+
+    if (ad.is_reverse_scraped) {
+        if (ad.price_vinted || ad.price) details.push(`Cena: ${ad.price_vinted || ad.price}`);
+        if (ad.listing_status) details.push(`Status Vinted: ${ad.listing_status}`);
+    }
     
     detailsElement.textContent = details.join('\n');
     card.appendChild(detailsElement);
@@ -221,7 +234,9 @@ async function createAdvertisementCard(ad, index, styles) {
     
     const descPreviewContent = document.createElement('div');
     descPreviewContent.className = 'description-preview-content';
-    descPreviewContent.textContent = 'Kliknij nagłówek aby rozwinąć podgląd opisu';
+    descPreviewContent.textContent = ad.is_reverse_scraped && ad.opis
+        ? ad.opis
+        : 'Kliknij nagłówek aby rozwinąć podgląd opisu';
     descPreviewContainer.appendChild(descPreviewContent);
     
     const refreshPreviewBtn = document.createElement('button');
@@ -292,6 +307,15 @@ async function createAdvertisementCard(ad, index, styles) {
     copyDescButton.className = 'copy-btn copy-desc-btn';
     copyDescButton.onclick = () => copyAdvertisementToClipboard(ad);
     buttonContainer.appendChild(copyDescButton);
+
+    if (ad.is_reverse_scraped && ad.listing_url) {
+        const openListingBtn = document.createElement('button');
+        openListingBtn.textContent = 'Otwórz ogłoszenie Vinted';
+        openListingBtn.className = 'copy-btn';
+        openListingBtn.style.background = '#0ea5e9';
+        openListingBtn.onclick = () => window.open(ad.listing_url, '_blank');
+        buttonContainer.appendChild(openListingBtn);
+    }
 
     // Copy Vinted price button
     const copyVintedPriceBtn = document.createElement('button');
@@ -375,19 +399,21 @@ function copyGrailedPrice(ad) {
     };
     buttonContainer.appendChild(copyEnglishDescBtn);
 
-    // Vinted status button
-    const vintedStatusButton = document.createElement('button');
-    vintedStatusButton.className = `vinted-status-btn ${ad.is_published_to_vinted ? 'published' : ''}`;
-    vintedStatusButton.textContent = ad.is_published_to_vinted ? '✓ Opublikowane' : '⊕ Nie opublikowane';
-    vintedStatusButton.onclick = () => toggleVintedStatus(ad.id, vintedStatusButton, card);
-    buttonContainer.appendChild(vintedStatusButton);
-    
-    // Grailed status button
-    const grailedStatusButton = document.createElement('button');
-    grailedStatusButton.className = `grailed-status-btn ${ad.is_published_to_grailed ? 'published' : ''}`;
-    grailedStatusButton.textContent = ad.is_published_to_grailed ? '✓ Opublikowane (Grailed)' : '⊕ Nie opublikowane (Grailed)';
-    grailedStatusButton.onclick = () => toggleGrailedStatus(ad.id, grailedStatusButton, card);
-    buttonContainer.appendChild(grailedStatusButton);
+    if (showPublicationButtons) {
+        // Vinted status button
+        const vintedStatusButton = document.createElement('button');
+        vintedStatusButton.className = `vinted-status-btn ${ad.is_published_to_vinted ? 'published' : ''}`;
+        vintedStatusButton.textContent = ad.is_published_to_vinted ? '✓ Opublikowane' : '⊕ Nie opublikowane';
+        vintedStatusButton.onclick = () => toggleVintedStatus(ad.id, vintedStatusButton, card);
+        buttonContainer.appendChild(vintedStatusButton);
+
+        // Grailed status button
+        const grailedStatusButton = document.createElement('button');
+        grailedStatusButton.className = `grailed-status-btn ${ad.is_published_to_grailed ? 'published' : ''}`;
+        grailedStatusButton.textContent = ad.is_published_to_grailed ? '✓ Opublikowane (Grailed)' : '⊕ Nie opublikowane (Grailed)';
+        grailedStatusButton.onclick = () => toggleGrailedStatus(ad.id, grailedStatusButton, card);
+        buttonContainer.appendChild(grailedStatusButton);
+    }
     
     card.appendChild(buttonContainer);
 
@@ -813,20 +839,15 @@ async function init() {
     // Show auth bar with username (if known) and loading state
     const storedUsername = (() => { try { return localStorage.getItem('app_username'); } catch (e) { return null; } })();
     renderAuthBar(authContainer, storedUsername);
-    container.innerHTML = '<div class="loading">Ładowanie danych z Supabase...</div>';
+    container.innerHTML = '<div class="loading">Ładowanie danych z Firebase...</div>';
         
-        // Fetch data from Supabase (server will scope by cookie)
-        const data = await fetchSupabaseData();
+        // Fetch data from Firebase (server scopes by session cookie)
+        const data = await fetchFirebaseData();
         
-        updateDebug(`Pobrano ${data.advertisements.length} reklam, ${data.styles.length} stylów`);
+        updateDebug(`Pobrano ${data.advertisements.length} reklam, ${data.reverseAdvertisements.length} reverse i ${data.styles.length} stylów`);
         
         // Clear loading state
         container.innerHTML = '';
-        
-        if (data.advertisements.length === 0) {
-            container.innerHTML = '<div class="error">Brak danych do wyświetlenia</div>';
-            return;
-        }
         
         // Add Vinted automation buttons
         const automationContainer = document.createElement('div');
@@ -1045,6 +1066,14 @@ async function init() {
         priceAutomationButton.style.cssText = 'background: #15803d; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
         priceAutomationButton.onclick = () => runVintedPriceAutomation();
         priceButtonRow.appendChild(priceAutomationButton);
+
+        // Reverse scraper button
+        const reverseScraperButton = document.createElement('button');
+        reverseScraperButton.textContent = '🔁 Odwrotny scraper';
+        reverseScraperButton.className = 'automation-btn reverse-scraper-btn';
+        reverseScraperButton.style.cssText = 'background: #0f766e; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;';
+        reverseScraperButton.onclick = () => runVintedReverseScraper();
+        priceButtonRow.appendChild(reverseScraperButton);
         
         priceAutomationContainer.appendChild(priceAutomationTitle);
         priceAutomationContainer.appendChild(priceAutomationDescription);
@@ -1052,14 +1081,68 @@ async function init() {
         priceAutomationContainer.appendChild(priceButtonRow);
         container.appendChild(priceAutomationContainer);
         
-        // Create and append advertisement cards
-        for (let i = 0; i < data.advertisements.length; i++) {
-            const ad = data.advertisements[i];
-            const card = await createAdvertisementCard(ad, i, data.styles);
-            container.appendChild(card);
-        }
-        
-        updateDebug(`Wyświetlono ${data.advertisements.length} ukończonych ogłoszeń`);
+        const viewSwitch = document.createElement('div');
+        viewSwitch.style.cssText = 'margin: 16px 0; display: flex; gap: 10px; justify-content: center;';
+
+        const normalViewBtn = document.createElement('button');
+        normalViewBtn.textContent = '📦 Standardowe ogłoszenia';
+        normalViewBtn.className = 'automation-btn';
+        normalViewBtn.style.cssText = 'background:#1d4ed8;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+
+        const reverseViewBtn = document.createElement('button');
+        reverseViewBtn.textContent = '🔁 Dane z reverse scrapera';
+        reverseViewBtn.className = 'automation-btn';
+        reverseViewBtn.style.cssText = 'background:#475569;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+
+        viewSwitch.appendChild(normalViewBtn);
+        viewSwitch.appendChild(reverseViewBtn);
+        container.appendChild(viewSwitch);
+
+        const cardsContainer = document.createElement('div');
+        container.appendChild(cardsContainer);
+
+        let currentView = 'normal';
+
+        const setActiveViewButtons = () => {
+            normalViewBtn.style.background = currentView === 'normal' ? '#1d4ed8' : '#64748b';
+            reverseViewBtn.style.background = currentView === 'reverse' ? '#0f766e' : '#64748b';
+        };
+
+        const renderCardsForCurrentView = async () => {
+            const source = currentView === 'reverse' ? data.reverseAdvertisements : data.advertisements;
+            cardsContainer.innerHTML = '';
+
+            if (!source || source.length === 0) {
+                cardsContainer.innerHTML = `<div class="error">Brak ogłoszeń dla widoku: ${currentView === 'reverse' ? 'reverse scraper' : 'standardowe'}</div>`;
+                updateDebug(`Widok ${currentView}: brak danych`);
+                return;
+            }
+
+            for (let i = 0; i < source.length; i++) {
+                const ad = source[i];
+                const card = await createAdvertisementCard(ad, i, data.styles, {
+                    showPublicationButtons: currentView !== 'reverse',
+                });
+                cardsContainer.appendChild(card);
+            }
+
+            updateDebug(`Widok ${currentView}: wyświetlono ${source.length} ogłoszeń`);
+        };
+
+        normalViewBtn.onclick = async () => {
+            currentView = 'normal';
+            setActiveViewButtons();
+            await renderCardsForCurrentView();
+        };
+
+        reverseViewBtn.onclick = async () => {
+            currentView = 'reverse';
+            setActiveViewButtons();
+            await renderCardsForCurrentView();
+        };
+
+        setActiveViewButtons();
+        await renderCardsForCurrentView();
         
     } catch (error) {
         updateDebug(`Błąd podczas inicjalizacji: ${error.message}`);
@@ -1098,17 +1181,10 @@ function renderAuthBar(container, username) {
         form.className = 'login-form';
 
         const usernameInput = document.createElement('input');
-        usernameInput.placeholder = '👤 Nazwa użytkownika';
+        usernameInput.placeholder = '👤 Wpisz nick';
         usernameInput.name = 'username';
         usernameInput.className = 'login-input';
         usernameInput.autocomplete = 'username';
-
-        const passwordInput = document.createElement('input');
-        passwordInput.type = 'password';
-        passwordInput.placeholder = '🔑 Hasło';
-        passwordInput.name = 'password';
-        passwordInput.className = 'login-input';
-        passwordInput.autocomplete = 'current-password';
 
         const submit = document.createElement('button');
         submit.type = 'submit';
@@ -1116,7 +1192,6 @@ function renderAuthBar(container, username) {
         submit.className = 'auth-btn login';
 
         form.appendChild(usernameInput);
-        form.appendChild(passwordInput);
         form.appendChild(submit);
 
         form.addEventListener('submit', async (e) => {
@@ -1125,12 +1200,11 @@ function renderAuthBar(container, username) {
             submit.textContent = '⏳ Logowanie...';
             
             const u = usernameInput.value.trim();
-            const p = passwordInput.value;
             try {
                 const resp = await fetch('http://localhost:3001/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: u, password: p })
+                    body: JSON.stringify({ username: u })
                 });
                 const json = await resp.json();
                 if (json && json.success) {
@@ -1171,15 +1245,9 @@ function renderLoginForm(container) {
     form.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:12px;';
 
     const username = document.createElement('input');
-    username.placeholder = 'username';
+    username.placeholder = 'nick';
     username.name = 'username';
     username.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
-
-    const password = document.createElement('input');
-    password.type = 'password';
-    password.placeholder = 'password';
-    password.name = 'password';
-    password.style.cssText = 'padding:8px; border-radius:6px; border:1px solid #ddd;';
 
     const submit = document.createElement('button');
     submit.type = 'submit';
@@ -1197,7 +1265,6 @@ function renderLoginForm(container) {
     };
 
     form.appendChild(username);
-    form.appendChild(password);
     form.appendChild(submit);
     form.appendChild(logoutBtn);
 
@@ -1205,12 +1272,11 @@ function renderLoginForm(container) {
         e.preventDefault();
         submit.disabled = true;
         const u = username.value.trim();
-        const p = password.value;
         try {
             const resp = await fetch('http://localhost:3001/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u, password: p })
+                body: JSON.stringify({ username: u })
             });
             const json = await resp.json();
             if (json && json.success) {
@@ -1277,6 +1343,39 @@ async function connectVintedAutomation() {
     } catch (error) {
         console.error('Error connecting automation:', error);
         showMessage('❌ Błąd podłączenia automatyzacji: ' + error.message);
+    }
+}
+
+// Function to run reverse Vinted scraper (drafts first, then active)
+async function runVintedReverseScraper() {
+    try {
+        const profileUrlInput = document.getElementById('vintedProfileUrl');
+        const profileUrl = profileUrlInput ? profileUrlInput.value.trim() : '';
+
+        if (profileUrl) {
+            showMessage(`🔁 Uruchamiam odwrotny scraper dla profilu: ${profileUrl}`);
+        } else {
+            showMessage('🔁 Uruchamiam odwrotny scraper (bieżący profil Vinted)...');
+        }
+
+        const response = await fetch('/api/vinted/reverse-scrape', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ profileUrl: profileUrl || undefined })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showMessage('✅ ' + result.message);
+        } else {
+            showMessage('❌ ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error running reverse scraper:', error);
+        showMessage('❌ Błąd reverse scrapera: ' + error.message);
     }
 }
 

@@ -1,40 +1,165 @@
-import { supabase } from './supabaseClient';
+import { firebaseApp } from './firebaseConfig';
+import {
+    getFirestore,
+    collection,
+    query,
+    where,
+    getDocs,
+    getDoc,
+    doc,
+    updateDoc,
+    addDoc,
+    limit,
+} from 'firebase/firestore';
 
-// NOTE: assumptions
-// - advertisements table has a column named `user_id` referencing users.id.
-//   If your column has a different name (owner_id, created_by, etc.), adjust the .eq(...) below.
+const db = getFirestore(firebaseApp);
+
+type AnyRecord = Record<string, any>;
+
+function toMillis(value: any): number {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value?.seconds === 'number') return value.seconds * 1000;
+    const parsed = Date.parse(String(value));
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function normalizeAd(ad: AnyRecord): AnyRecord {
+    const photoUris = Array.isArray(ad.photo_uris)
+        ? ad.photo_uris
+        : Array.isArray(ad.photos)
+            ? ad.photos
+            : ad.photo_uris
+                ? [ad.photo_uris]
+                : [];
+
+    return {
+        ...ad,
+        photo_uris: photoUris,
+        photos: photoUris,
+    };
+}
+
+function sortByCreatedAtDesc<T extends AnyRecord>(rows: T[]): T[] {
+    return [...rows].sort((a, b) => toMillis(b.created_at) - toMillis(a.created_at));
+}
+
+function sortByTimestampDesc<T extends AnyRecord>(rows: T[], fields: string[]): T[] {
+    return [...rows].sort((a, b) => {
+        const aTs = fields.map((f) => toMillis(a[f])).find((x) => x > 0) || 0;
+        const bTs = fields.map((f) => toMillis(b[f])).find((x) => x > 0) || 0;
+        return bTs - aTs;
+    });
+}
+
+function normalizeReverseScrapedAd(row: AnyRecord): AnyRecord {
+    const description = String(row.description || '');
+
+    const getMeasurement = (patterns: RegExp[]): string => {
+        for (const pattern of patterns) {
+            const match = description.match(pattern);
+            if (match?.[1]) return String(match[1]).trim();
+        }
+        return '';
+    };
+
+    const dlugosc = getMeasurement([
+        /d[łl]ugo(?:[śs]?[ćc])?\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+        /length\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+    ]);
+    const szerokosc = getMeasurement([
+        /szeroko(?:[śs]?[ćc])?\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+        /width\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+    ]);
+    const pas = getMeasurement([
+        /pas\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+        /waist\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+    ]);
+    const udo = getMeasurement([
+        /udo\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+        /thigh\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+    ]);
+    const dlugoscNogawki = getMeasurement([
+        /nogawka\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+        /inseam\s*[:]?\s*(\d+(?:[.,]\d+)?)/i,
+    ]);
+
+    const photoUris = Array.isArray(row.image_urls)
+        ? row.image_urls
+        : Array.isArray(row.image_details)
+            ? row.image_details.map((img: AnyRecord) => img?.src).filter(Boolean)
+            : [];
+
+    const normalizedPrice = String(row.price || '').trim();
+
+    return {
+        id: row.vinted_item_id || row.id,
+        vinted_item_id: row.vinted_item_id || null,
+        marka: row.brand || '',
+        rodzaj: row.category || '',
+        typ: row.category || '',
+        rozmiar: row.size || '',
+        stan: row.condition || '',
+        color: row.color || '',
+        wada: '',
+        opis: row.description || '',
+        dlugosc,
+        szerokosc,
+        pas,
+        udo,
+        dlugosc_nogawki: dlugoscNogawki,
+        title: row.title || '',
+        listing_url: row.listing_url || '',
+        edit_url: row.edit_url || '',
+        listing_status: row.listing_status || '',
+        price: normalizedPrice,
+        price_vinted: normalizedPrice,
+        photo_uris: photoUris,
+        photos: photoUris,
+        is_reverse_scraped: true,
+        is_completed: true,
+        is_published_to_vinted: row.listing_status === 'active',
+        is_published_to_grailed: false,
+        created_at: row.scraped_at || row.updated_at || null,
+        scraped_at: row.scraped_at || null,
+        updated_at: row.updated_at || null,
+        user_id: row.user_id || null,
+    };
+}
+
+async function readCollection(collectionName: string, constraints: any[] = []): Promise<AnyRecord[]> {
+    const ref = collection(db, collectionName);
+    const q = constraints.length > 0 ? query(ref, ...constraints) : ref;
+    const snap = await getDocs(q as any);
+
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as AnyRecord) }));
+}
+
+async function findAdvertisementDocId(advertisementId: string): Promise<string | null> {
+    if (!advertisementId) return null;
+
+    const directRef = doc(db, 'advertisements', advertisementId);
+    const directSnap = await getDoc(directRef);
+    if (directSnap.exists()) return advertisementId;
+
+    const byBusinessId = await readCollection('advertisements', [
+        where('id', '==', advertisementId),
+        limit(1),
+    ]);
+
+    if (byBusinessId.length > 0) {
+        return String(byBusinessId[0].id);
+    }
+
+    return null;
+}
 
 export async function fetchAdvertisements(userId?: string) {
     try {
-        let query: any = supabase
-            .from('advertisements')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (userId) {
-            query = query.eq('user_id', userId);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching advertisements:', error);
-            return [];
-        }
-
-        console.log('🔍 Debug: First few advertisements from database:');
-        if (data && data.length > 0) {
-            for (let i = 0; i < Math.min(3, data.length); i++) {
-                const ad = data[i];
-                console.log(`  Advertisement ${i + 1}:`);
-                console.log(`    - ID: ${ad.id}`);
-                console.log(`    - Title: ${ad.title?.substring(0, 50)}...`);
-                console.log(`    - is_completed: ${ad.is_completed}`);
-                console.log(`    - Photos: ${ad.photos?.length || 0} photos`);
-            }
-        }
-
-        return data || [];
+        const constraints = userId ? [where('user_id', '==', userId)] : [];
+        const rows = await readCollection('advertisements', constraints);
+        return sortByCreatedAtDesc(rows.map(normalizeAd));
     } catch (error) {
         console.error('Error in fetchAdvertisements:', error);
         return [];
@@ -43,25 +168,10 @@ export async function fetchAdvertisements(userId?: string) {
 
 export async function fetchCompletedAdvertisements(userId?: string) {
     try {
-        let query: any = supabase
-            .from('advertisements')
-            .select('*')
-            .eq('is_completed', true)
-            .order('created_at', { ascending: false });
-
-        // allow caller to pass userId via optional property on function
-        // (we keep compatibility by checking arguments object)
-        const maybeUserId = (arguments as any)[0];
-        if (maybeUserId) query = query.eq('user_id', maybeUserId);
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching completed advertisements:', error);
-            return [];
-        }
-
-        return data || [];
+        const constraints = [where('is_completed', '==', true)];
+        if (userId) constraints.push(where('user_id', '==', userId));
+        const rows = await readCollection('advertisements', constraints);
+        return sortByCreatedAtDesc(rows.map(normalizeAd));
     } catch (error) {
         console.error('Error in fetchCompletedAdvertisements:', error);
         return [];
@@ -70,23 +180,10 @@ export async function fetchCompletedAdvertisements(userId?: string) {
 
 export async function fetchIncompleteAdvertisements(userId?: string) {
     try {
-        let query: any = supabase
-            .from('advertisements')
-            .select('*')
-            .eq('is_completed', false)
-            .order('created_at', { ascending: false });
-
-        const maybeUserId = (arguments as any)[0];
-        if (maybeUserId) query = query.eq('user_id', maybeUserId);
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching incomplete advertisements:', error);
-            return [];
-        }
-
-        return data || [];
+        const constraints = [where('is_completed', '==', false)];
+        if (userId) constraints.push(where('user_id', '==', userId));
+        const rows = await readCollection('advertisements', constraints);
+        return sortByCreatedAtDesc(rows.map(normalizeAd));
     } catch (error) {
         console.error('Error in fetchIncompleteAdvertisements:', error);
         return [];
@@ -95,56 +192,15 @@ export async function fetchIncompleteAdvertisements(userId?: string) {
 
 export async function fetchUnpublishedToVintedAdvertisements(userId?: string) {
     try {
-    console.log('[supabaseFetcher] fetchUnpublishedToVintedAdvertisements called with userId=', userId);
-        let query: any = supabase
-            .from('advertisements')
-            .select('*')
-            .eq('is_published_to_vinted', false)
-            .not('marka', 'is', null)
-            .not('rodzaj', 'is', null)
-            .not('rozmiar', 'is', null)
-            .not('stan', 'is', null)
-            .order('created_at', { ascending: false });
+        const constraints = [where('is_published_to_vinted', '==', false)];
+        if (userId) constraints.push(where('user_id', '==', userId));
 
-        if (userId) {
-            query = query.eq('user_id', userId);
-        }
+        const rows = await readCollection('advertisements', constraints);
+        const valid = rows
+            .map(normalizeAd)
+            .filter((ad) => ad.marka && ad.rodzaj && ad.rozmiar && ad.stan && ad.photo_uris?.length > 0);
 
-    const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching unpublished advertisements:', error);
-            return [];
-        }
-
-        // Log a small sample of returned rows for debugging
-        try {
-            const sample = (data || []).slice(0, 5).map((d: any) => ({ id: d.id, user_id: d.user_id }));
-            console.log('[supabaseFetcher] fetchUnpublishedToVintedAdvertisements sample rows:', sample);
-        } catch (e) {
-            console.log('[supabaseFetcher] could not log sample rows for Vinted', e);
-        }
-
-        // Additional filter for empty strings and ensure photos exist
-        const validAdvertisements = (data || []).filter((ad: any) => {
-            const hasRequiredFields = ad.marka && ad.rodzaj && ad.rozmiar && ad.stan;
-            const hasPhotos = ad.photo_uris && ad.photo_uris.length > 0;
-            
-            if (!hasRequiredFields) {
-                console.log(`⚠️ Skipping advertisement ${ad.id}: missing required fields (marka: ${ad.marka}, rodzaj: ${ad.rodzaj}, rozmiar: ${ad.rozmiar}, stan: ${ad.stan})`);
-                return false;
-            }
-            
-            if (!hasPhotos) {
-                console.log(`⚠️ Skipping advertisement ${ad.id}: no photos available`);
-                return false;
-            }
-            
-            return true;
-        });
-
-        console.log(`✅ Found ${validAdvertisements.length} valid unpublished advertisements (filtered from ${(data || []).length} total)`);
-        return validAdvertisements;
+        return sortByCreatedAtDesc(valid);
     } catch (error) {
         console.error('Error in fetchUnpublishedToVintedAdvertisements:', error);
         return [];
@@ -153,57 +209,18 @@ export async function fetchUnpublishedToVintedAdvertisements(userId?: string) {
 
 export async function fetchUnpublishedToGrailedAdvertisements(userId?: string) {
     try {
-    console.log('[supabaseFetcher] fetchUnpublishedToGrailedAdvertisements called with userId=', userId);
-        let query: any = supabase
-            .from('advertisements')
-            .select('*')
-            .eq('is_published_to_grailed', false)
-            .eq('is_completed', true)
-            .not('marka', 'is', null)
-            .not('rodzaj', 'is', null)
-            .not('rozmiar', 'is', null)
-            .not('stan', 'is', null)
-            .order('created_at', { ascending: false });
+        const constraints = [
+            where('is_published_to_grailed', '==', false),
+            where('is_completed', '==', true),
+        ];
+        if (userId) constraints.push(where('user_id', '==', userId));
 
-        if (userId) {
-            query = query.eq('user_id', userId);
-        }
+        const rows = await readCollection('advertisements', constraints);
+        const valid = rows
+            .map(normalizeAd)
+            .filter((ad) => ad.marka && ad.rodzaj && ad.rozmiar && ad.stan && ad.photo_uris?.length > 0);
 
-    const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching unpublished to Grailed advertisements:', error);
-            return [];
-        }
-
-        // Log a small sample of returned rows for debugging
-        try {
-            const sample = (data || []).slice(0, 5).map((d: any) => ({ id: d.id, user_id: d.user_id }));
-            console.log('[supabaseFetcher] fetchUnpublishedToGrailedAdvertisements sample rows:', sample);
-        } catch (e) {
-            console.log('[supabaseFetcher] could not log sample rows for Grailed', e);
-        }
-
-        // Additional filter for empty strings and ensure photos exist
-        const validAdvertisements = (data || []).filter((ad: any) => {
-            const hasRequiredFields = ad.marka && ad.rodzaj && ad.rozmiar && ad.stan;
-            const hasPhotos = ad.photo_uris && ad.photo_uris.length > 0;
-            
-            if (!hasRequiredFields) {
-                console.log(`⚠️ Skipping advertisement ${ad.id}: missing required fields (marka: ${ad.marka}, rodzaj: ${ad.rodzaj}, rozmiar: ${ad.rozmiar}, stan: ${ad.stan})`);
-                return false;
-            }
-            
-            if (!hasPhotos) {
-                console.log(`⚠️ Skipping advertisement ${ad.id}: no photos available`);
-                return false;
-            }
-            
-            return true;
-        });
-
-        console.log(`📦 Found ${validAdvertisements.length} completed and unpublished advertisements ready for Grailed`);
-        return validAdvertisements;
+        return sortByCreatedAtDesc(valid);
     } catch (error) {
         console.error('Error in fetchUnpublishedToGrailedAdvertisements:', error);
         return [];
@@ -212,24 +229,11 @@ export async function fetchUnpublishedToGrailedAdvertisements(userId?: string) {
 
 export async function fetchStyles(userId?: string) {
     try {
-        let query: any = supabase
-            .from('style_templates')
-            .select('*')
-            .eq('is_active', true)
-            .order('order_index', { ascending: true });
+        const constraints = [where('is_active', '==', true)];
+        if (userId) constraints.push(where('user_id', '==', userId));
 
-        if (userId) {
-            query = query.eq('user_id', userId);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching styles:', error);
-            return [];
-        }
-
-        return data || [];
+        const rows = await readCollection('style_templates', constraints);
+        return rows.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
     } catch (error) {
         console.error('Error in fetchStyles:', error);
         return [];
@@ -238,177 +242,141 @@ export async function fetchStyles(userId?: string) {
 
 export async function fetchStyleByType(productType: string, userId?: string) {
     try {
-        // Handle null, undefined, or empty product types
         if (!productType || productType.trim() === '') {
-            console.log('⚠️ No product type provided, using fallback style');
-            return await fetchStyles(userId).then(styles => styles[0] || null);
+            const styles = await fetchStyles(userId);
+            return styles[0] || null;
         }
 
-        let query: any = supabase
-            .from('style_templates')
-            .select('*')
-            .eq('is_active', true)
-            .eq('style_name', productType);
+        const constraints = [where('is_active', '==', true), where('style_name', '==', productType)];
+        if (userId) constraints.push(where('user_id', '==', userId));
 
-        if (userId) {
-            query = query.eq('user_id', userId);
-        }
+        const rows = await readCollection('style_templates', constraints);
+        if (rows.length > 0) return rows[0];
 
-        const { data, error } = await query.single();
-
-        if (error) {
-            console.log(`⚠️ No specific style found for type "${productType}", using fallback style`);
-            // Fallback to first active style if no specific type found
-            return await fetchStyles(userId).then(styles => styles[0] || null);
-        }
-
-        return data;
+        const fallback = await fetchStyles(userId);
+        return fallback[0] || null;
     } catch (error) {
         console.error('Error in fetchStyleByType:', error);
-        // Fallback to first active style if no specific type found
-        return await fetchStyles(userId).then(styles => styles[0] || null);
+        const fallback = await fetchStyles(userId);
+        return fallback[0] || null;
     }
 }
 
 export async function fetchDescriptionHeaders(platform?: string, userId?: string) {
     try {
-        let query: any = supabase
-            .from('description_headers')
-            .select('*')
-            .eq('is_active', true)
-            .order('order_index', { ascending: true });
+        const constraints = [where('is_active', '==', true)];
+        if (platform) constraints.push(where('platform', '==', platform));
+        if (userId) constraints.push(where('user_id', '==', userId));
 
-        if (platform) {
-            query = query.eq('platform', platform);
-        }
-
-        if (userId) {
-            query = query.eq('user_id', userId);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching description headers:', error);
-            return [];
-        }
-
-        return data || [];
+        const rows = await readCollection('description_headers', constraints);
+        return rows.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
     } catch (error) {
         console.error('Error in fetchDescriptionHeaders:', error);
         return [];
     }
 }
 
-// Login via database RPC `login_user(p_username text, p_password text)`.
-// The function provided by the user returns a row with user id and message.
-export async function loginUser(username: string, password: string) {
+export async function fetchReverseScrapedAdvertisements(userId?: string) {
     try {
-        const { data, error } = await supabase.rpc('login_user', { p_username: username, p_password: password });
+        const constraints = userId ? [where('user_id', '==', userId)] : [];
+        const rows = await readCollection('vinted_reverse_scraped_ads', constraints);
+        const normalized = rows.map(normalizeReverseScrapedAd);
+        return sortByTimestampDesc(normalized, ['scraped_at', 'updated_at', 'created_at']);
+    } catch (error) {
+        console.error('Error in fetchReverseScrapedAdvertisements:', error);
+        return [];
+    }
+}
 
-        if (error) {
-            console.error('Error calling login_user RPC:', error);
-            return { success: false, message: error.message || 'RPC error', data: null };
+// Login by username only (nickname). If user does not exist, create it automatically.
+export async function loginUser(username: string) {
+    try {
+        const normalizedUsername = (username || '').trim();
+        if (!normalizedUsername) {
+            return { success: false, message: 'Username is required', data: null };
         }
 
-        // RPC may return an array or a single record depending on your Postgres function setup.
-        let result = Array.isArray(data) ? data[0] : data;
+        const users = await readCollection('users', [
+            where('username', '==', normalizedUsername),
+            limit(1),
+        ]);
 
-        // Normalize different shapes:
-        // 1) object with named properties: { id, username, display_name, email, ... }
-        // 2) array positional: [ id, username, display_name, email, success_flag, message ]
-        // 3) nested array or unexpected shape
-
-        if (!result) {
-            console.warn('loginUser: RPC returned no data', { data });
-            return { success: false, message: 'No data from RPC', data: null };
-        }
-
-        // If it's an array (positional), map known indices
-        if (Array.isArray(result)) {
-            const [id, usernameRes, display_name, email, okFlag, message] = result;
-            const normalized = { id, username: usernameRes, display_name, email, ok: okFlag, message };
-            return { success: true, data: normalized };
-        }
-
-        // If it's an object but doesn't have `id`, it might have numeric keys or `?column?` keys
-        if (typeof result === 'object') {
-            // handle common Postgres anonymous column name '?column?'
-            if (!('id' in result)) {
-                const keys = Object.keys(result);
-                // try to pick sensible values from the first several columns
-                if (keys.length >= 1 && (keys[0] === '?column?' || keys[0].match(/^column\d*$/i))) {
-                    const vals = keys.map(k => (result as any)[k]);
-                    const [id, usernameRes, display_name, email, okFlag, message] = vals;
-                    const normalized = { id, username: usernameRes, display_name, email, ok: okFlag, message };
-                    return { success: true, data: normalized };
-                }
+        if (users.length > 0) {
+            const user = users[0];
+            if (user.is_active === false) {
+                return { success: false, message: 'Konto nieaktywne', data: null };
             }
 
-            // If we have id property, return as-is (but ensure message field exists)
-            const normalizedObj: any = {
-                id: (result as any).id,
-                username: (result as any).username || (result as any).user_name || null,
-                display_name: (result as any).display_name || (result as any).displayname || null,
-                email: (result as any).email || null,
-                ok: (result as any).ok ?? (result as any).success ?? true,
-                message: (result as any).message || (result as any).msg || null,
+            return {
+                success: true,
+                data: {
+                    id: user.id,
+                    username: user.username,
+                    display_name: user.display_name || null,
+                    email: user.email || null,
+                },
             };
-
-            return { success: true, data: normalizedObj };
         }
 
-        // Fallback: unknown shape
-        console.warn('loginUser: unexpected RPC return shape', { data });
-        return { success: true, data: result };
+        const newUserId = crypto.randomUUID();
+        const payload = {
+            id: newUserId,
+            username: normalizedUsername,
+            display_name: normalizedUsername,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+
+        await addDoc(collection(db, 'users'), payload);
+
+        return {
+            success: true,
+            data: {
+                id: newUserId,
+                username: normalizedUsername,
+                display_name: normalizedUsername,
+                email: null,
+            },
+        };
     } catch (err) {
         console.error('Exception in loginUser:', err);
         return { success: false, message: String(err), data: null };
     }
 }
 
-// Helper: find a user's numeric id by username (used when RPC doesn't return id)
 export async function getUserIdByUsername(username: string) {
     try {
-        if (!username) return null;
-        const { data, error } = await supabase
-            .from('users')
-            .select('id')
-            .eq('username', username)
-            .maybeSingle();
+        const normalizedUsername = (username || '').trim();
+        if (!normalizedUsername) return null;
 
-        if (error) {
-            console.error('Error fetching user id by username:', error);
-            return null;
-        }
+        const users = await readCollection('users', [
+            where('username', '==', normalizedUsername),
+            limit(1),
+        ]);
 
-    const foundId = (data && (data as any).id) ? (data as any).id : null;
-    console.log(`getUserIdByUsername: looked up id for username='${username}' ->`, foundId);
-    return foundId;
+        if (users.length === 0) return null;
+        return String(users[0].id);
     } catch (err) {
         console.error('Exception in getUserIdByUsername:', err);
         return null;
     }
 }
 
-// Helper: find username by user id
 export async function getUsernameById(userId: string) {
     try {
         if (!userId) return null;
-        const { data, error } = await supabase
-            .from('users')
-            .select('username')
-            .eq('id', userId)
-            .maybeSingle();
 
-        if (error) {
-            console.error('Error fetching username by id:', error);
-            return null;
+        const directRef = doc(db, 'users', userId);
+        const directSnap = await getDoc(directRef);
+        if (directSnap.exists()) {
+            const d = directSnap.data() as AnyRecord;
+            return d.username || null;
         }
 
-        const username = (data && (data as any).username) ? (data as any).username : null;
-        console.log(`getUsernameById: looked up username for id='${userId}' ->`, username);
-        return username;
+        const users = await readCollection('users', [where('id', '==', userId), limit(1)]);
+        if (users.length === 0) return null;
+        return users[0].username || null;
     } catch (err) {
         console.error('Exception in getUsernameById:', err);
         return null;
@@ -417,17 +385,10 @@ export async function getUsernameById(userId: string) {
 
 export async function updateAdvertisementStatus(advertisementId: string, isCompleted: boolean) {
     try {
-        const { error } = await supabase
-            .from('advertisements')
-            .update({ is_completed: isCompleted })
-            .eq('id', advertisementId);
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) return false;
 
-        if (error) {
-            console.error('Error updating advertisement status:', error);
-            return false;
-        }
-
-        console.log(`✅ Advertisement ${advertisementId} marked as ${isCompleted ? 'completed' : 'incomplete'}`);
+        await updateDoc(doc(db, 'advertisements', docId), { is_completed: isCompleted });
         return true;
     } catch (error) {
         console.error('Error in updateAdvertisementStatus:', error);
@@ -437,17 +398,10 @@ export async function updateAdvertisementStatus(advertisementId: string, isCompl
 
 export async function updateVintedPublishStatus(advertisementId: string, isPublished: boolean) {
     try {
-        const { error } = await supabase
-            .from('advertisements')
-            .update({ is_published_to_vinted: isPublished })
-            .eq('id', advertisementId);
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) return false;
 
-        if (error) {
-            console.error('Error updating Vinted publish status:', error);
-            return false;
-        }
-
-        console.log(`✅ Advertisement ${advertisementId} marked as ${isPublished ? 'published to Vinted' : 'not published to Vinted'}`);
+        await updateDoc(doc(db, 'advertisements', docId), { is_published_to_vinted: isPublished });
         return true;
     } catch (error) {
         console.error('Error in updateVintedPublishStatus:', error);
@@ -457,36 +411,21 @@ export async function updateVintedPublishStatus(advertisementId: string, isPubli
 
 export async function toggleVintedPublishStatus(advertisementId: string) {
     try {
-        // Najpierw pobierz aktualny status
-        const { data, error: fetchError } = await supabase
-            .from('advertisements')
-            .select('is_published_to_vinted')
-            .eq('id', advertisementId)
-            .single();
-
-        if (fetchError) {
-            console.error('Error fetching current status:', fetchError);
-            return { success: false, message: 'Błąd pobierania aktualnego statusu' };
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
         }
 
-        // Przełącz status
-        const newStatus = !data.is_published_to_vinted;
-        
-        const { error: updateError } = await supabase
-            .from('advertisements')
-            .update({ is_published_to_vinted: newStatus })
-            .eq('id', advertisementId);
-
-        if (updateError) {
-            console.error('Error updating Vinted publish status:', updateError);
-            return { success: false, message: 'Błąd aktualizacji statusu' };
+        const snap = await getDoc(doc(db, 'advertisements', docId));
+        if (!snap.exists()) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
         }
 
-        console.log(`✅ Advertisement ${advertisementId} status changed to ${newStatus ? 'published to Vinted' : 'not published to Vinted'}`);
-        return { 
-            success: true, 
-            is_published_to_vinted: newStatus 
-        };
+        const current = (snap.data() as AnyRecord).is_published_to_vinted === true;
+        const next = !current;
+        await updateDoc(doc(db, 'advertisements', docId), { is_published_to_vinted: next });
+
+        return { success: true, is_published_to_vinted: next };
     } catch (error) {
         console.error('Error in toggleVintedPublishStatus:', error);
         return { success: false, message: 'Błąd serwera' };
@@ -495,17 +434,12 @@ export async function toggleVintedPublishStatus(advertisementId: string) {
 
 export async function updateGrailedPublishStatus(advertisementId: string, isPublished: boolean) {
     try {
-        const { error } = await supabase
-            .from('advertisements')
-            .update({ is_published_to_grailed: isPublished })
-            .eq('id', advertisementId);
-
-        if (error) {
-            console.error('Error updating Grailed publish status:', error);
-            return { success: false, message: 'Błąd aktualizacji statusu Grailed' };
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
         }
 
-        console.log(`✅ Advertisement ${advertisementId} Grailed status updated to ${isPublished ? 'published' : 'not published'}`);
+        await updateDoc(doc(db, 'advertisements', docId), { is_published_to_grailed: isPublished });
         return { success: true };
     } catch (error) {
         console.error('Error in updateGrailedPublishStatus:', error);
@@ -515,56 +449,35 @@ export async function updateGrailedPublishStatus(advertisementId: string, isPubl
 
 export async function toggleGrailedPublishStatus(advertisementId: string) {
     try {
-        // Pobierz aktualny status
-        const { data, error } = await supabase
-            .from('advertisements')
-            .select('is_published_to_grailed')
-            .eq('id', advertisementId)
-            .single();
-
-        if (error) {
-            console.error('Error fetching current Grailed status:', error);
-            return { success: false, message: 'Błąd pobierania statusu' };
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
         }
 
-        // Przełącz status
-        const newStatus = !data.is_published_to_grailed;
-        
-        const { error: updateError } = await supabase
-            .from('advertisements')
-            .update({ is_published_to_grailed: newStatus })
-            .eq('id', advertisementId);
-
-        if (updateError) {
-            console.error('Error updating Grailed publish status:', updateError);
-            return { success: false, message: 'Błąd aktualizacji statusu' };
+        const snap = await getDoc(doc(db, 'advertisements', docId));
+        if (!snap.exists()) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
         }
 
-        console.log(`✅ Advertisement ${advertisementId} status changed to ${newStatus ? 'published to Grailed' : 'not published to Grailed'}`);
-        return { 
-            success: true, 
-            is_published_to_grailed: newStatus 
-        };
+        const current = (snap.data() as AnyRecord).is_published_to_grailed === true;
+        const next = !current;
+        await updateDoc(doc(db, 'advertisements', docId), { is_published_to_grailed: next });
+
+        return { success: true, is_published_to_grailed: next };
     } catch (error) {
         console.error('Error in toggleGrailedPublishStatus:', error);
         return { success: false, message: 'Błąd serwera' };
     }
 }
 
-// Save Vinted URL to database
 export async function saveVintedUrl(advertisementId: string, vintedUrl: string) {
     try {
-        const { error } = await supabase
-            .from('advertisements')
-            .update({ Vinted_URL: vintedUrl })
-            .eq('id', advertisementId);
-
-        if (error) {
-            console.error('Error saving Vinted URL:', error);
-            return { success: false, message: 'Błąd zapisywania URL Vinted' };
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
         }
 
-        console.log(`✅ Vinted URL saved for advertisement ${advertisementId}: ${vintedUrl}`);
+        await updateDoc(doc(db, 'advertisements', docId), { Vinted_URL: vintedUrl });
         return { success: true };
     } catch (error) {
         console.error('Error in saveVintedUrl:', error);

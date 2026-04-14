@@ -1,19 +1,21 @@
-import { supabase } from './src/supabaseClient';
+import { getFirestore, collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { firebaseApp } from './src/firebaseConfig';
 
 async function checkAdvertisement() {
+    const db = getFirestore(firebaseApp);
     console.log('🔍 Checking advertisement data...\n');
-    
-    const { data, error } = await supabase
-        .from('advertisements')
-        .select('*')
-        .eq('id', 'd85fc112-ed8c-407c-bf14-72ffc43fca45')
-        .single();
-    
-    if (error) {
-        console.error('Error:', error);
+
+    const snap = await getDocs(
+        query(collection(db, 'advertisements'), where('id', '==', 'd85fc112-ed8c-407c-bf14-72ffc43fca45'), limit(1))
+    );
+
+    if (snap.empty) {
+        console.error('Error: advertisement not found');
         return;
     }
-    
+
+    const data = { id: snap.docs[0].id, ...snap.docs[0].data() } as any;
+
     console.log('📋 Advertisement data:');
     console.log('ID:', data.id);
     console.log('Marka:', data.marka);

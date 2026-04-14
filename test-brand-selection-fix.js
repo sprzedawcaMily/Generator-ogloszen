@@ -30,6 +30,10 @@ const improvements = [
         found: sourceCode.includes('Using fallback: clicking first brand element')
     },
     {
+        name: 'Nowy selektor inputu marki (ID)',
+        found: sourceCode.includes('#brand-search-input')
+    },
+    {
         name: 'Usunięcie ogólnego selektora li .web_ui__Cell__cell',
         found: !sourceCode.includes("'li .web_ui__Cell__cell'")
     }
@@ -44,26 +48,26 @@ console.log(`\n📊 WYNIKI: ${passedImprovements}/${improvements.length} ulepsze
 
 if (passedImprovements === improvements.length) {
     console.log('\n🎉 WSZYSTKIE ULEPSZENIA WDROŻONE!');
-    
+
     console.log('\n🔄 NOWY PROCES WYBORU MARKI:');
     console.log('1️⃣ Szuka dokładnie po aria-label="Mia soana"');
     console.log('2️⃣ Jeśli nie znaleziono → przeszukuje elementy [id^="brand-"]');
     console.log('3️⃣ Porównuje nazwy marek (ignoruje wielkość liter)');
     console.log('4️⃣ Fallback → kliknie pierwszy element z brand- ID');
     console.log('5️⃣ Loguje każdy sprawdzany element');
-    
+
     console.log('\n🎯 ROZWIĄZANE PROBLEMY:');
     console.log('• Klikanie w checkbox zamiast markę');
     console.log('• Zbyt ogólne selektory');
     console.log('• Brak precyzyjnego wyszukiwania');
     console.log('• Odznaczanie checkbox Unisex');
-    
+
     console.log('\n💡 PRZYKŁAD DZIAŁANIA:');
     console.log('Szukana marka: "Mia soana"');
     console.log('1. Szuka: [aria-label="Mia soana"]');
     console.log('2. Sprawdza: <div id="brand-280" aria-label="Mia soana">');
     console.log('3. ✅ Znaleziono i kliknięto w właściwy element');
-    
+
 } else {
     console.log('\n⚠️  Niektóre ulepszenia wymagają weryfikacji');
 }

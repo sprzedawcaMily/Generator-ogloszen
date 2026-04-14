@@ -1,6 +1,8 @@
-import { supabase } from './src/supabaseClient';
+import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import { firebaseApp } from './src/firebaseConfig';
 
 async function createTestAdvertisements() {
+    const db = getFirestore(firebaseApp);
     console.log('🏗️  Creating test advertisements...\n');
     
     const testAds = [
@@ -37,16 +39,12 @@ async function createTestAdvertisements() {
         console.log(`📝 Creating advertisement ${i + 1}: "${ad.title}"`);
         
         try {
-            const { data, error } = await supabase
-                .from('advertisements')
-                .insert([ad])
-                .select();
-            
-            if (error) {
-                console.error(`❌ Error creating advertisement ${i + 1}:`, error);
-            } else {
-                console.log(`✅ Created advertisement ${i + 1} with ID: ${data[0].id}`);
-            }
+            const ref = await addDoc(collection(db, 'advertisements'), {
+                ...ad,
+                photo_uris: ad.photos,
+                created_at: new Date().toISOString(),
+            });
+            console.log(`✅ Created advertisement ${i + 1} with ID: ${ref.id}`);
         } catch (error) {
             console.error(`❌ Exception creating advertisement ${i + 1}:`, error);
         }

@@ -706,10 +706,10 @@ export class VintedAutomation {
             
             console.log('🚀 Uruchamiam Chrome z debug portem...');
             
-            // Utwórz unikalny katalog dla profilu debug w folderze użytkownika
+            // Użyj stałego katalogu profilu, aby sesja Google/Vinted była zapamiętana.
             const { execSync } = await import('child_process');
             const userDir = process.env.USERPROFILE || process.env.HOME || '.';
-            let debugDir = `${userDir}\\AppData\\Local\\Temp\\chrome-debug-vinted-${Date.now()}`;
+            let debugDir = `${userDir}\\AppData\\Local\\Kamochi\\chrome-debug-main-profile`;
             
             try {
                 console.log(`📁 Tworzę katalog debug: ${debugDir}`);
@@ -717,8 +717,8 @@ export class VintedAutomation {
                 console.log(`✅ Utworzono katalog debug`);
             } catch (error) {
                 console.log('⚠️ Błąd tworzenia katalogu:', error);
-                // Spróbuj alternatywny katalog w bieżącym folderze
-                debugDir = `.\\chrome-debug-${Date.now()}`;
+                // Spróbuj alternatywny stały katalog w bieżącym folderze
+                debugDir = `.\\chrome-debug-main-profile`;
                 try {
                     execSync(`mkdir "${debugDir}"`, { stdio: 'ignore' });
                     console.log(`✅ Utworzono alternatywny katalog: ${debugDir}`);
@@ -727,28 +727,8 @@ export class VintedAutomation {
                     return false;
                 }
             }
-            
-            // Zamknij istniejące procesy Chrome przed uruchomieniem nowego
-            console.log('🔄 Zamykam istniejące procesy Chrome...');
-            try {
-                const { execSync } = await import('child_process');
-                console.log('⚠️ Zamykam wszystkie procesy Chrome...');
-                execSync('taskkill /F /IM chrome.exe 2>NUL', { stdio: 'ignore' });
-                console.log('✅ Procesy Chrome zamknięte');
-                await new Promise(resolve => setTimeout(resolve, 3000)); // Czekaj 3 sekundy
-            } catch {
-                console.log('ℹ️ Brak procesów Chrome do zamknięcia');
-            }
-            
-            // Wyczyść port 9222 z potencjalnych pozostałości
-            try {
-                console.log('🧹 Czyszczę port 9222...');
-                execSync('netstat -ano | findstr :9222', { stdio: 'ignore' });
-                // Jeśli znajdzie coś na porcie 9222, zabij proces
-                execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr :9222\') do taskkill /F /PID %a 2>NUL', { stdio: 'ignore' });
-            } catch {
-                console.log('ℹ️ Port 9222 jest wolny');
-            }
+
+            console.log('💾 Używam trwałego profilu Chrome - konto powinno pozostać zalogowane.');
             
             // Uruchom Chrome z debug portem w tle
             console.log('🚀 Uruchamiam nowy Chrome z debug portem...');
@@ -837,9 +817,9 @@ export class VintedAutomation {
             console.log('📄 Strona logowania jest teraz otwarta');
             console.log('');
             console.log('💡 WAŻNE WSKAZÓWKI:');
-            console.log('   ❌ NIE używaj "Zaloguj się przez Google"');
-            console.log('   ✅ Użyj "Zaloguj się przez email"');
-            console.log('   ✅ Lub utwórz nowe konto bezpośrednio');
+            console.log('   ✅ Możesz użyć "Zaloguj się przez Google"');
+            console.log('   ✅ Sesja będzie zapisana w trwałym profilu Chrome');
+            console.log('   ✅ Przy kolejnych uruchomieniach nie powinno wymagać ponownego logowania');
             console.log('');
             
         } catch (error) {

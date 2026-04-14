@@ -1,5 +1,5 @@
 import { serve } from "bun";
-import { fetchAdvertisements, fetchCompletedAdvertisements, fetchIncompleteAdvertisements, fetchStyles, fetchDescriptionHeaders, fetchStyleByType } from './supabaseFetcher';
+import { fetchAdvertisements, fetchCompletedAdvertisements, fetchIncompleteAdvertisements, fetchStyles, fetchDescriptionHeaders, fetchStyleByType, fetchReverseScrapedAdvertisements } from './supabaseFetcher';
 
 const DEFAULT_PORT = Number(process.env.PORT) || 3001;
 
@@ -110,6 +110,19 @@ async function handleFetch(req: Request) {
                 });
             }
 
+            // Endpoint dla ogłoszeń pobranych reverse scraperem z Vinted
+            if (url.pathname === "/api/vinted/reverse-scraped") {
+                const userId = getUserIdFromReq(req);
+                console.log('Fetching /api/vinted/reverse-scraped for userId=', userId);
+                const data = await fetchReverseScrapedAdvertisements(userId || undefined);
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
             // Endpoint: return current logged-in user id (if any)
             if (url.pathname === "/api/me") {
                 const userId = getUserIdFromReq(req);
@@ -141,23 +154,23 @@ async function handleFetch(req: Request) {
                 return new Response(JSON.stringify({ success: true }), { headers });
             }
 
-            // Endpoint: login (no account creation). Expects JSON { username, password }
+            // Endpoint: login by nickname only. Expects JSON { username }
             if (url.pathname === "/api/login" && req.method === "POST") {
                 try {
                     const body = await req.json();
-                    const { username, password } = body || {};
-                    if (!username || !password) {
-                        return new Response(JSON.stringify({ success: false, message: 'username and password required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                    const { username } = body || {};
+                    if (!username) {
+                        return new Response(JSON.stringify({ success: false, message: 'username required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
                     }
 
                     const { loginUser } = await import('./supabaseFetcher');
-                    const res = await loginUser(username, password);
+                    const res = await loginUser(username);
 
-                    // Log full RPC wrapper result for debugging
+                    // Log full login result for debugging
                     try {
-                        console.log('loginUser RPC result:', JSON.stringify(res));
+                        console.log('loginUser result:', JSON.stringify(res));
                     } catch (e) {
-                        console.log('loginUser RPC result (non-serializable):', res);
+                        console.log('loginUser result (non-serializable):', res);
                     }
 
                     if (!res.success) {
@@ -185,7 +198,7 @@ async function handleFetch(req: Request) {
                     }
 
                     if (!userId) {
-                        // If RPC didn't return id but returned username, try to resolve id from users table
+                        // If login result didn't return id but returned username, try to resolve id
                         const maybeUsername = (userRow && typeof userRow === 'object') ? ((userRow as any).username || (userRow as any).user_name || null) : null;
                         if (maybeUsername) {
                             const { getUserIdByUsername } = await import('./supabaseFetcher');
@@ -197,8 +210,8 @@ async function handleFetch(req: Request) {
                     }
 
                     if (!userId) {
-                        // Return rpc payload to make debugging easier for the developer
-                        return new Response(JSON.stringify({ success: false, message: 'No user id returned from RPC', rpc: res }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                        // Return login payload to make debugging easier for the developer
+                        return new Response(JSON.stringify({ success: false, message: 'No user id returned from login', rpc: res }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
                     }
 
                     // Set HttpOnly cookie with user_id (simple session). Adjust Secure/SameSite for production.
@@ -356,6 +369,67 @@ async function handleFetch(req: Request) {
                 return new Response(JSON.stringify({
                     success: false,
                     message: "Błąd podłączenia automatyzacji: " + error
+                }), {
+                    status: 500,
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+        }
+
+        // Endpoint for reverse scraping listings from Vinted profile (drafts first, then active)
+        if (url.pathname === "/api/vinted/reverse-scrape" && req.method === "POST") {
+            try {
+                const body = await req.json().catch(() => ({}));
+                const profileUrl = (body?.profileUrl || '').trim() || undefined;
+
+                const { runVintedReverseScraperWithExistingBrowser, preflightVintedReverseScraperBrowser } = await import('./vintedReverseScraper');
+
+                function getUserIdFromReqLocal(r: Request) {
+                    const headerUser = r.headers.get('x-user-id');
+                    if (headerUser) return headerUser;
+                    const cookie = r.headers.get('cookie') || '';
+                    const match = cookie.match(/(?:^|; )user_id=([^;]+)/);
+                    if (match) return decodeURIComponent(match[1]);
+                    return null;
+                }
+
+                const userIdForScraper = getUserIdFromReqLocal(req);
+
+                const preflight = await preflightVintedReverseScraperBrowser();
+                if (!preflight.ok) {
+                    return new Response(JSON.stringify(preflight), {
+                        status: 409,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+
+                runVintedReverseScraperWithExistingBrowser(userIdForScraper || undefined, profileUrl)
+                    .then((summary) => {
+                        console.log('✅ Reverse scraper completed:', summary);
+                    })
+                    .catch((error) => {
+                        console.error('❌ Reverse scraper failed:', error);
+                    });
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    message: 'Reverse scraper uruchomiony. Przegląda drafty, potem aktywne i zapisuje do Firebase.'
+                }), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            } catch (error) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    message: 'Błąd reverse scrapera: ' + error
                 }), {
                     status: 500,
                     headers: {

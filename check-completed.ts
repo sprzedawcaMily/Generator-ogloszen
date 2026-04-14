@@ -1,20 +1,16 @@
-import { supabase } from './src/supabaseClient';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { firebaseApp } from './src/firebaseConfig';
 
 async function checkCompletedAds() {
+    const db = getFirestore(firebaseApp);
     console.log('🔍 Checking for completed advertisements with valid data...\n');
-    
-    const { data, error } = await supabase
-        .from('advertisements')
-        .select('*')
-        .eq('is_completed', true)
-        .not('marka', 'is', null)
-        .not('rodzaj', 'is', null)
-        .limit(3);
-    
-    if (error) {
-        console.error('Error:', error);
-        return;
-    }
+
+    const snap = await getDocs(collection(db, 'advertisements'));
+    const allAds = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const data = allAds
+        .filter((ad) => ad.is_completed === true)
+        .filter((ad) => ad.marka != null && ad.rodzaj != null)
+        .slice(0, 3);
     
     console.log('📊 Completed advertisements with data:');
     if (data && data.length > 0) {
@@ -34,12 +30,9 @@ async function checkCompletedAds() {
     
     // Also check for any ads with proper data structure
     console.log('\n🔍 Checking all ads with marka and rodzaj...');
-    const { data: validAds } = await supabase
-        .from('advertisements')
-        .select('*')
-        .not('marka', 'is', null)
-        .not('rodzaj', 'is', null)
-        .limit(5);
+    const validAds = allAds
+        .filter((ad) => ad.marka != null && ad.rodzaj != null)
+        .slice(0, 5);
     
     if (validAds && validAds.length > 0) {
         console.log(`Found ${validAds.length} advertisements with valid marka/rodzaj:`);

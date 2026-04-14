@@ -17,20 +17,23 @@
     "test-photos": "bun run test-photo-upload.ts",
     "debug-vinted": "bun run debug-vinted.ts",
     "debug-photos": "bun run debug-photo-upload.ts",
-    "chrome-debug": "powershell -ExecutionPolicy Bypass -File start-chrome-debug.ps1"
+    "chrome-debug": "powershell -ExecutionPolicy Bypass -File start-chrome-debug.ps1",
+    "backfill:reverse": "bun run scripts/backfill-reverse-scraped-fields.ts"
   },
   "devDependencies": {
+    "@types/bun": "^1.2.20",
     "@babel/core": "^7.28.4",
     "babel-preset-expo": "^10.0.0",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.0",
-    "@supabase/supabase-js": "^2.56.1",
     "@types/puppeteer": "^7.0.4",
+    "@types/react": "~18.2.45",
     "expo": "~50.0.20",
     "expo-constants": "~15.4.6",
     "expo-font": "~11.10.3",
+    "firebase": "^11.10.0",
     "expo-image-picker": "~14.7.1",
     "expo-status-bar": "~1.11.1",
     "puppeteer": "^24.17.1",
