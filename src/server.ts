@@ -1,11 +1,12 @@
 import { serve } from "bun";
-import { fetchAdvertisements, fetchCompletedAdvertisements, fetchIncompleteAdvertisements, fetchStyles, fetchDescriptionHeaders, fetchStyleByType, fetchReverseScrapedAdvertisements } from './supabaseFetcher';
+import { fetchAdvertisements, fetchCompletedAdvertisements, fetchIncompleteAdvertisements, fetchStyles, fetchDescriptionHeaders, fetchStyleByType, fetchReverseScrapedAdvertisements, fetchSoldAdvertisements } from './supabaseFetcher';
 
 const DEFAULT_PORT = Number(process.env.PORT) || 3001;
 
 // Cached exchange rate (PLN -> USD). Default fallback used until fetched.
 let cachedPlnToUsdRate = 0.25;
 let exchangeRateFetchedAt: number | null = null;
+let vintedAutomationInProgress = false;
 
 async function fetchAndCacheExchangeRateOnce() {
     try {
@@ -102,6 +103,19 @@ async function handleFetch(req: Request) {
                 const userId = getUserIdFromReq(req);
                 console.log('Fetching /api/advertisements/incomplete for userId=', userId);
                 const data = await fetchIncompleteAdvertisements(userId as any);
+                return new Response(JSON.stringify(data), {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                });
+            }
+
+            // Endpoint dla sprzedanych reklam z archiwum
+            if (url.pathname === "/api/advertisements/sold") {
+                const userId = getUserIdFromReq(req);
+                console.log('Fetching /api/advertisements/sold for userId=', userId);
+                const data = await fetchSoldAdvertisements(userId || undefined);
                 return new Response(JSON.stringify(data), {
                     headers: {
                         "Content-Type": "application/json",
@@ -235,7 +249,21 @@ async function handleFetch(req: Request) {
                 console.log('🚀 Starting Vinted automation from web interface...');
 
                 // Import dynamically to avoid issues
-                const { runVintedAutomationWithExistingBrowser } = await import('./vintedAutomation');
+                const { runVintedAutomationWithExistingBrowser, preflightVintedExistingBrowser } = await import('./vintedAutomation');
+
+                const preflight = await preflightVintedExistingBrowser();
+                if (!preflight.ok) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        message: preflight.message
+                    }), {
+                        status: 409,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
 
                 // determine user id from cookie/header
                 function getUserIdFromReqLocal(r: Request) {
@@ -286,6 +314,20 @@ async function handleFetch(req: Request) {
             try {
                 console.log('🚀 Uruchamiam Chrome do logowania...');
 
+                if (vintedAutomationInProgress) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        alreadyRunning: true,
+                        message: "Automatyzacja Vinted już działa. Nie uruchamiaj ponownie Chrome podczas aktywnego procesu."
+                    }), {
+                        status: 409,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+
                 const { VintedAutomation } = await import('./vintedAutomation');
                 const automation = new VintedAutomation();
 
@@ -333,7 +375,37 @@ async function handleFetch(req: Request) {
             try {
                 console.log('🔗 Podłączam automatyzację do Chrome...');
 
-                const { runVintedAutomationWithExistingBrowser } = await import('./vintedAutomation');
+                if (vintedAutomationInProgress) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        alreadyRunning: true,
+                        message: "Automatyzacja Vinted już działa. Poczekaj na zakończenie lub zaloguj się w otwartej przeglądarce."
+                    }), {
+                        status: 409,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+
+                const { runVintedAutomationWithExistingBrowser, preflightVintedExistingBrowser } = await import('./vintedAutomation');
+
+                const preflight = await preflightVintedExistingBrowser();
+                if (!preflight.ok) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        message: preflight.message
+                    }), {
+                        status: 409,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*"
+                        }
+                    });
+                }
+
+                vintedAutomationInProgress = true;
 
                 // determine user id from cookie/header
                 function getUserIdFromReqLocal(r: Request) {
@@ -354,6 +426,9 @@ async function handleFetch(req: Request) {
                     })
                     .catch((error) => {
                         console.error('❌ Vinted automation failed:', error);
+                    })
+                    .finally(() => {
+                        vintedAutomationInProgress = false;
                     });
 
                 return new Response(JSON.stringify({
@@ -529,6 +604,109 @@ async function handleFetch(req: Request) {
                 }
             } catch (error) {
                 return new Response(JSON.stringify({ success: false, message: "Błąd serwera: " + error }), { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+            }
+        }
+
+        // Endpoint do przełączania statusu sprzedaży ogłoszenia
+        if (url.pathname === "/api/advertisements/toggle-sold-status" && req.method === "POST") {
+            try {
+                const body = await req.json();
+                const { advertisementId } = body;
+
+                if (!advertisementId) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        message: "Brak ID ogłoszenia"
+                    }), {
+                        status: 400,
+                        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                    });
+                }
+
+                const { toggleAdvertisementSoldStatus } = await import('./supabaseFetcher');
+                const result = await toggleAdvertisementSoldStatus(advertisementId);
+
+                if (result.success) {
+                    return new Response(JSON.stringify({
+                        success: true,
+                        status: result.status,
+                        is_sold: result.is_sold,
+                        optimization: result.optimization || null,
+                        message: result.is_sold ? "Ogłoszenie oznaczone jako sprzedane" : "Ogłoszenie przywrócone jako aktywne"
+                    }), {
+                        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                    });
+                }
+
+                return new Response(JSON.stringify({
+                    success: false,
+                    message: result.message || "Błąd zmiany statusu sprzedaży"
+                }), {
+                    status: 500,
+                    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                });
+            } catch (error) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    message: "Błąd serwera: " + error
+                }), {
+                    status: 500,
+                    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                });
+            }
+        }
+
+        // Endpoint do ręcznej optymalizacji danych sprzedanych ogłoszeń
+        if (url.pathname === "/api/advertisements/optimize-sold-storage" && req.method === "POST") {
+            try {
+                const body = await req.json().catch(() => ({}));
+                const advertisementId = body?.advertisementId ? String(body.advertisementId) : '';
+                const userId = getUserIdFromReq(req);
+
+                if (advertisementId) {
+                    const { optimizeAdvertisementStorage } = await import('./supabaseFetcher');
+                    const result = await optimizeAdvertisementStorage(advertisementId);
+                    return new Response(JSON.stringify(result), {
+                        status: result.success ? 200 : 400,
+                        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                    });
+                }
+
+                const { optimizeAllSoldAdvertisements } = await import('./supabaseFetcher');
+                const result = await optimizeAllSoldAdvertisements(userId || undefined);
+                return new Response(JSON.stringify(result), {
+                    status: result.success ? 200 : 500,
+                    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                });
+            } catch (error) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    message: "Błąd serwera: " + error
+                }), {
+                    status: 500,
+                    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                });
+            }
+        }
+
+        // Endpoint do migracji już sprzedanych rekordów z advertisements -> sold_advertisements
+        if (url.pathname === "/api/advertisements/migrate-sold-archive" && req.method === "POST") {
+            try {
+                const userId = getUserIdFromReq(req);
+                const { migrateSoldAdvertisementsToArchive } = await import('./supabaseFetcher');
+                const result = await migrateSoldAdvertisementsToArchive(userId || undefined);
+                return new Response(JSON.stringify(result), {
+                    status: result.success ? 200 : 500,
+                    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                });
+            } catch (error) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    message: "Błąd serwera: " + error
+                }), {
+                    status: 500,
+                    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+                });
             }
         }
 
@@ -808,6 +986,17 @@ async function handleFetch(req: Request) {
             }
         }
 
+        // Wszystkie nieobsłużone ścieżki /api/* zwracają JSON 404
+        if (url.pathname.startsWith('/api/')) {
+            return new Response(JSON.stringify({
+                success: false,
+                message: `Nieznany endpoint API: ${url.pathname}`
+            }), {
+                status: 404,
+                headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+            });
+        }
+
         // Obsługa głównej strony
         if (url.pathname === "/" || url.pathname === "/index.html") {
             return new Response(Bun.file("./index.html"));
@@ -818,6 +1007,11 @@ async function handleFetch(req: Request) {
             return new Response(null, { status: 204 });
         }
         
+        // Obsługa plików statycznych tylko dla metod odczytu
+        if (req.method !== "GET" && req.method !== "HEAD") {
+            return new Response("Method Not Allowed", { status: 405 });
+        }
+
         // Obsługa plików statycznych
         let filePath = "." + url.pathname;
         if (url.pathname.startsWith('/src/')) {
@@ -837,7 +1031,14 @@ async function handleFetch(req: Request) {
         return new Response(file, { headers });
     } catch (error) {
         console.error(`Error serving ${url.pathname}:`, error);
-        }
+        return new Response(JSON.stringify({
+            success: false,
+            message: "Błąd serwera: " + error
+        }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+        });
+    }
 
         // ============= DASHBOARD FRONTEND =============
         

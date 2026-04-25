@@ -38,6 +38,29 @@
 
 ---
 
+## 🗄️ **Baza danych**
+
+- ✅ Projekt używa **Firebase Firestore** jako jedynej bazy danych.
+- ℹ️ Nazwa pliku `supabaseFetcher.ts` jest historyczna - logika działa na Firebase (`firebase/firestore`).
+- ✅ Dla ogłoszeń ze statusem `sold/sprzedane` serwer automatycznie optymalizuje payload:
+  - zostawia tylko pierwsze zdjęcie w `photo_uris`
+  - usuwa duplikat `photos`
+  - kompresuje je, jeśli jest zapisane jako `data:image/...;base64,...`
+  - usuwa ciężkie pole `image_details` (jeśli istnieje)
+- ✅ Sprzedane ogłoszenia są archiwizowane do osobnej kolekcji `sold_advertisements`
+  - z aktywnej kolekcji `advertisements` są usuwane po oznaczeniu jako sprzedane
+  - dzięki temu główna lista aktywnych ogłoszeń ładuje się szybciej
+- ✅ Ogłoszenia reverse-scrapowane są zapisywane bezpośrednio do `advertisements`
+  - nie ma już osobnej kolekcji roboczej dla aktywnych rekordów reverse
+  - wszystkie aktywne ogłoszenia (ręczne + scrapowane) są w jednym źródle danych
+- 🔧 Ręczna optymalizacja przez API: `POST /api/advertisements/optimize-sold-storage`
+  - bez body: optymalizuje wszystkie sprzedane ogłoszenia zalogowanego użytkownika
+  - z body `{"advertisementId":"<id>"}`: optymalizuje jedno ogłoszenie
+- 🔧 Migracja starych sprzedanych z `advertisements` do `sold_advertisements`:
+  - `POST /api/advertisements/migrate-sold-archive`
+
+---
+
 ## 🎯 **PRZYKŁAD AUTOMATYZACJI VINTED**
 
 ```
@@ -55,6 +78,7 @@
 - **Bun.js** - szybki runtime JavaScript
 - **TypeScript** - typowany JavaScript  
 - **Puppeteer** - automatyzacja przeglądarki
+- **Firebase Firestore** - baza danych ogłoszeń i konfiguracji
 - **HTML/CSS** - interfejs użytkownika
 
 ---

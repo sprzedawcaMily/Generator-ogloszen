@@ -87,29 +87,40 @@ function getShortenedProductType(rodzaj) {
     return typeMap[rodzaj] || rodzaj;
 }
 
+const styleByTypeCache = new Map();
+
 // Fetch style by product type
 async function fetchStyleByType(productType) {
     try {
         if (!productType) return null;
+        const cacheKey = String(productType).trim().toLowerCase();
+        if (styleByTypeCache.has(cacheKey)) {
+            return styleByTypeCache.get(cacheKey);
+        }
         
         const response = await fetch(`http://localhost:3001/api/styles/${encodeURIComponent(productType)}`);
-        if (!response.ok) return null;
+        if (!response.ok) {
+            styleByTypeCache.set(cacheKey, null);
+            return null;
+        }
         
-        return await response.json();
+        const style = await response.json();
+        styleByTypeCache.set(cacheKey, style || null);
+        return style || null;
     } catch (error) {
         console.error(`Error fetching style for type ${productType}:`, error);
         return null;
     }
 }
 
-// Fetch data from Supabase
-async function fetchSupabaseData() {
+// Fetch data from Firebase
+async function fetchFirebaseData() {
     try {
-        updateDebug('Pobieranie danych z Supabase...');
+        updateDebug('Pobieranie danych z Firebase...');
         
-        const [advertisements, reverseAdvertisements, styles, descriptionHeaders] = await Promise.all([
+        const [advertisements, soldAdvertisements, styles, descriptionHeaders] = await Promise.all([
             fetch('http://localhost:3001/api/advertisements').then(r => r.json()),
-            fetch('http://localhost:3001/api/vinted/reverse-scraped').then(r => r.json()).catch(() => []),
+            fetch('http://localhost:3001/api/advertisements/sold').then(r => r.json()).catch(() => []),
             fetch('http://localhost:3001/api/styles').then(r => r.json()),
             fetch('http://localhost:3001/api/description-headers').then(r => r.json())
         ]);
@@ -118,7 +129,7 @@ async function fetchSupabaseData() {
 
         return {
             advertisements: advertisements || [],
-            reverseAdvertisements: reverseAdvertisements || [],
+            soldAdvertisements: soldAdvertisements || [],
             styles: styles || [],
             descriptionHeaders: descriptionHeaders || []
         };
@@ -126,7 +137,7 @@ async function fetchSupabaseData() {
         updateDebug(`Błąd podczas pobierania danych: ${error.message}`);
         return {
             advertisements: [],
-            reverseAdvertisements: [],
+            soldAdvertisements: [],
             styles: [],
             descriptionHeaders: []
         };
@@ -152,16 +163,33 @@ async function fetchExchangeRate() {
     return null;
 }
 
+function isAdSold(ad) {
+    if (ad?.is_sold === true || ad?.isSold === true || ad?.sold === true) {
+        return true;
+    }
+    const normalized = String(ad?.status ?? ad?.sale_status ?? ad?.listing_status ?? '').trim().toLowerCase();
+    return normalized === 'sold' || normalized === 'sprzedany' || normalized === 'sprzedane';
+}
+
+function applyCardStateClasses(card, adState) {
+    card.className = 'item-card completed';
+    if (adState?.is_published_to_vinted) {
+        card.classList.add('published-vinted');
+    }
+    if (isAdSold(adState)) {
+        card.classList.add('sold');
+    }
+}
+
 // Create a product card from advertisement data
 async function createAdvertisementCard(ad, index, styles, options = {}) {
     const showPublicationButtons = options.showPublicationButtons !== false;
     const card = document.createElement('div');
-    // Ustaw klasę CSS na podstawie statusu publikacji na Vinted
-    if (ad.is_published_to_vinted) {
-        card.className = 'item-card completed published-vinted';
-    } else {
-        card.className = 'item-card completed';
-    }
+    applyCardStateClasses(card, ad);
+    card.__adState = {
+        status: ad.status,
+        is_published_to_vinted: ad.is_published_to_vinted === true,
+    };
 
     const itemNumber = document.createElement('span');
     itemNumber.className = 'item-number';
@@ -217,6 +245,8 @@ async function createAdvertisementCard(ad, index, styles, options = {}) {
     if (ad.is_reverse_scraped) {
         if (ad.price_vinted || ad.price) details.push(`Cena: ${ad.price_vinted || ad.price}`);
         if (ad.listing_status) details.push(`Status Vinted: ${ad.listing_status}`);
+    } else if (isAdSold(ad)) {
+        details.push('Status sprzedaży: sprzedane');
     }
     
     detailsElement.textContent = details.join('\n');
@@ -413,6 +443,15 @@ function copyGrailedPrice(ad) {
         grailedStatusButton.textContent = ad.is_published_to_grailed ? '✓ Opublikowane (Grailed)' : '⊕ Nie opublikowane (Grailed)';
         grailedStatusButton.onclick = () => toggleGrailedStatus(ad.id, grailedStatusButton, card);
         buttonContainer.appendChild(grailedStatusButton);
+
+        const soldStatusButton = document.createElement('button');
+        soldStatusButton.className = `sold-status-btn ${isAdSold(ad) ? 'sold' : ''}`;
+        soldStatusButton.textContent = isAdSold(ad) ? '✓ Sprzedane (finalne)' : '🛒 Oznacz jako sprzedane';
+        if (isAdSold(ad)) {
+            soldStatusButton.disabled = true;
+        }
+        soldStatusButton.onclick = () => toggleSoldStatus(ad.id, soldStatusButton, card, ad);
+        buttonContainer.appendChild(soldStatusButton);
     }
     
     card.appendChild(buttonContainer);
@@ -839,12 +878,12 @@ async function init() {
     // Show auth bar with username (if known) and loading state
     const storedUsername = (() => { try { return localStorage.getItem('app_username'); } catch (e) { return null; } })();
     renderAuthBar(authContainer, storedUsername);
-    container.innerHTML = '<div class="loading">Ładowanie danych z Supabase...</div>';
+    container.innerHTML = '<div class="loading">Ładowanie danych z Firebase...</div>';
         
-        // Fetch data from Supabase (server will scope by cookie)
-        const data = await fetchSupabaseData();
+        // Fetch data from Firebase (server scopes by session cookie)
+        const data = await fetchFirebaseData();
         
-        updateDebug(`Pobrano ${data.advertisements.length} reklam, ${data.reverseAdvertisements.length} reverse i ${data.styles.length} stylów`);
+        updateDebug(`Pobrano ${data.advertisements.length} aktywnych, ${data.soldAdvertisements.length} sprzedanych i ${data.styles.length} stylów`);
         
         // Clear loading state
         container.innerHTML = '';
@@ -1084,62 +1123,147 @@ async function init() {
         const viewSwitch = document.createElement('div');
         viewSwitch.style.cssText = 'margin: 16px 0; display: flex; gap: 10px; justify-content: center;';
 
-        const normalViewBtn = document.createElement('button');
-        normalViewBtn.textContent = '📦 Standardowe ogłoszenia';
-        normalViewBtn.className = 'automation-btn';
-        normalViewBtn.style.cssText = 'background:#1d4ed8;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+        const activeViewBtn = document.createElement('button');
+        activeViewBtn.textContent = '📦 Aktywne ogłoszenia';
+        activeViewBtn.className = 'automation-btn';
+        activeViewBtn.style.cssText = 'background:#1d4ed8;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
 
-        const reverseViewBtn = document.createElement('button');
-        reverseViewBtn.textContent = '🔁 Dane z reverse scrapera';
-        reverseViewBtn.className = 'automation-btn';
-        reverseViewBtn.style.cssText = 'background:#475569;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+        const soldViewBtn = document.createElement('button');
+        soldViewBtn.textContent = '✅ Sprzedane (archiwum)';
+        soldViewBtn.className = 'automation-btn';
+        soldViewBtn.style.cssText = 'background:#475569;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
 
-        viewSwitch.appendChild(normalViewBtn);
-        viewSwitch.appendChild(reverseViewBtn);
+        viewSwitch.appendChild(activeViewBtn);
+        viewSwitch.appendChild(soldViewBtn);
         container.appendChild(viewSwitch);
+
+        const paginationContainer = document.createElement('div');
+        paginationContainer.style.cssText = 'margin: 8px 0 16px; display: flex; gap: 10px; justify-content: center; align-items: center;';
+        container.appendChild(paginationContainer);
+
+        const prevPageBtn = document.createElement('button');
+        prevPageBtn.textContent = '⬅ Poprzednia';
+        prevPageBtn.className = 'automation-btn';
+        prevPageBtn.style.cssText = 'background:#334155;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+
+        const pageInfo = document.createElement('span');
+        pageInfo.style.cssText = 'font-weight:700;color:#1f2937;';
+
+        const nextPageBtn = document.createElement('button');
+        nextPageBtn.textContent = 'Następna ➡';
+        nextPageBtn.className = 'automation-btn';
+        nextPageBtn.style.cssText = 'background:#334155;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+
+        const jumpToPageInput = document.createElement('input');
+        jumpToPageInput.type = 'number';
+        jumpToPageInput.min = '1';
+        jumpToPageInput.placeholder = 'nr strony';
+        jumpToPageInput.style.cssText = 'width:92px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-weight:600;';
+
+        const jumpToPageBtn = document.createElement('button');
+        jumpToPageBtn.textContent = 'Idź';
+        jumpToPageBtn.className = 'automation-btn';
+        jumpToPageBtn.style.cssText = 'background:#0f766e;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+
+        paginationContainer.appendChild(prevPageBtn);
+        paginationContainer.appendChild(pageInfo);
+        paginationContainer.appendChild(nextPageBtn);
+        paginationContainer.appendChild(jumpToPageInput);
+        paginationContainer.appendChild(jumpToPageBtn);
 
         const cardsContainer = document.createElement('div');
         container.appendChild(cardsContainer);
 
-        let currentView = 'normal';
-
+        let currentView = 'active';
+        const PAGE_SIZE = 35;
+        let currentPage = 1;
         const setActiveViewButtons = () => {
-            normalViewBtn.style.background = currentView === 'normal' ? '#1d4ed8' : '#64748b';
-            reverseViewBtn.style.background = currentView === 'reverse' ? '#0f766e' : '#64748b';
+            activeViewBtn.style.background = currentView === 'active' ? '#1d4ed8' : '#64748b';
+            soldViewBtn.style.background = currentView === 'sold' ? '#16a34a' : '#64748b';
         };
 
         const renderCardsForCurrentView = async () => {
-            const source = currentView === 'reverse' ? data.reverseAdvertisements : data.advertisements;
+            const sourceRaw = currentView === 'sold' ? (data.soldAdvertisements || []) : (data.advertisements || []);
+            const source = sourceRaw.filter((ad) => currentView === 'sold' ? isAdSold(ad) : !isAdSold(ad));
             cardsContainer.innerHTML = '';
 
-            if (!source || source.length === 0) {
-                cardsContainer.innerHTML = `<div class="error">Brak ogłoszeń dla widoku: ${currentView === 'reverse' ? 'reverse scraper' : 'standardowe'}</div>`;
+            if (!source.length) {
+                cardsContainer.innerHTML = `<div class="error">Brak ogłoszeń (${currentView === 'sold' ? 'sprzedane' : 'aktywne'})</div>`;
+                paginationContainer.style.display = 'none';
                 updateDebug(`Widok ${currentView}: brak danych`);
                 return;
             }
 
-            for (let i = 0; i < source.length; i++) {
-                const ad = source[i];
-                const card = await createAdvertisementCard(ad, i, data.styles, {
-                    showPublicationButtons: currentView !== 'reverse',
+            const totalPages = Math.max(1, Math.ceil(source.length / PAGE_SIZE));
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+            const startIdx = (currentPage - 1) * PAGE_SIZE;
+            const endIdx = Math.min(startIdx + PAGE_SIZE, source.length);
+            const pageItems = source.slice(startIdx, endIdx);
+
+            paginationContainer.style.display = 'flex';
+            pageInfo.textContent = `Strona ${currentPage}/${totalPages} (${source.length} ogłoszeń)`;
+            jumpToPageInput.max = String(totalPages);
+            prevPageBtn.disabled = currentPage === 1;
+            nextPageBtn.disabled = currentPage === totalPages;
+            prevPageBtn.style.opacity = prevPageBtn.disabled ? '0.5' : '1';
+            nextPageBtn.style.opacity = nextPageBtn.disabled ? '0.5' : '1';
+
+            for (let i = 0; i < pageItems.length; i++) {
+                const ad = pageItems[i];
+                const card = await createAdvertisementCard(ad, startIdx + i, data.styles, {
+                    showPublicationButtons: currentView !== 'sold',
                 });
                 cardsContainer.appendChild(card);
             }
 
-            updateDebug(`Widok ${currentView}: wyświetlono ${source.length} ogłoszeń`);
+            updateDebug(`Widok ${currentView}: wyświetlono ${pageItems.length}/${source.length} ogłoszeń (strona ${currentPage}/${totalPages})`);
         };
 
-        normalViewBtn.onclick = async () => {
-            currentView = 'normal';
+        activeViewBtn.onclick = async () => {
+            currentView = 'active';
+            currentPage = 1;
             setActiveViewButtons();
             await renderCardsForCurrentView();
         };
 
-        reverseViewBtn.onclick = async () => {
-            currentView = 'reverse';
+        soldViewBtn.onclick = async () => {
+            currentView = 'sold';
+            currentPage = 1;
             setActiveViewButtons();
             await renderCardsForCurrentView();
         };
+
+        prevPageBtn.onclick = async () => {
+            if (currentPage <= 1) return;
+            currentPage -= 1;
+            await renderCardsForCurrentView();
+        };
+
+        nextPageBtn.onclick = async () => {
+            currentPage += 1;
+            await renderCardsForCurrentView();
+        };
+
+        const jumpToPage = async () => {
+            const sourceRaw = currentView === 'sold' ? (data.soldAdvertisements || []) : (data.advertisements || []);
+            const source = sourceRaw.filter((ad) => currentView === 'sold' ? isAdSold(ad) : !isAdSold(ad));
+            const totalPages = Math.max(1, Math.ceil(source.length / PAGE_SIZE));
+            const requested = Number.parseInt(String(jumpToPageInput.value || '').trim(), 10);
+            if (!Number.isFinite(requested)) return;
+            const nextPage = Math.min(Math.max(requested, 1), totalPages);
+            currentPage = nextPage;
+            jumpToPageInput.value = String(nextPage);
+            await renderCardsForCurrentView();
+        };
+
+        jumpToPageBtn.onclick = jumpToPage;
+        jumpToPageInput.addEventListener('keydown', async (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                await jumpToPage();
+            }
+        });
 
         setActiveViewButtons();
         await renderCardsForCurrentView();
@@ -1401,20 +1525,65 @@ async function toggleVintedStatus(advertisementId, button, card) {
             if (result.is_published_to_vinted) {
                 button.textContent = '✓ Opublikowane';
                 button.className = 'vinted-status-btn published';
-                card.className = 'item-card completed published-vinted';
                 showMessage('✅ Oznaczono jako opublikowane na Vinted');
             } else {
                 button.textContent = '⊕ Nie opublikowane';
                 button.className = 'vinted-status-btn';
-                card.className = 'item-card completed';
                 showMessage('✅ Oznaczono jako nieopublikowane na Vinted');
             }
+            applyCardStateClasses(card, { ...card.__adState, is_published_to_vinted: result.is_published_to_vinted });
+            card.__adState = { ...(card.__adState || {}), is_published_to_vinted: result.is_published_to_vinted };
         } else {
             showMessage('❌ Błąd: ' + result.message);
         }
     } catch (error) {
         console.error('Error toggling Vinted status:', error);
         showMessage('❌ Błąd zmiany statusu: ' + error.message);
+    }
+}
+
+// Toggle advertisement sold status
+async function toggleSoldStatus(advertisementId, button, card, ad) {
+    try {
+        if (isAdSold(ad)) {
+            showMessage('ℹ️ To ogłoszenie jest już sprzedane i nie można cofnąć tej decyzji.');
+            button.disabled = true;
+            return;
+        }
+        const confirmed = window.confirm('Czy na pewno chcesz oznaczyć to ogłoszenie jako sprzedane? Tej decyzji nie można cofnąć.');
+        if (!confirmed) {
+            return;
+        }
+        showMessage('🔄 Aktualizuję status sprzedaży...');
+
+        const response = await fetch('/api/advertisements/toggle-sold-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                advertisementId
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            ad.status = 'sold';
+            button.textContent = '✓ Sprzedane (finalne)';
+            button.className = 'sold-status-btn sold';
+            button.disabled = true;
+            applyCardStateClasses(card, { ...ad, ...(card.__adState || {}), status: ad.status });
+            card.__adState = { ...(card.__adState || {}), status: ad.status };
+            card.style.opacity = '0.5';
+            setTimeout(() => card.remove(), 250);
+            showMessage('✅ Ogłoszenie oznaczone jako sprzedane i przeniesione do archiwum');
+        } else {
+            showMessage('❌ Błąd: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error toggling sold status:', error);
+        showMessage('❌ Błąd zmiany statusu sprzedaży: ' + error.message);
     }
 }
 

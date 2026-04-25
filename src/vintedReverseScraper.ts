@@ -179,12 +179,16 @@ class VintedReverseScraper {
         if (!itemId || !/^\d+$/.test(itemId)) return false;
 
         const docId = this.buildDocId(userId, itemId);
-        const snap = await getDoc(doc(this.db, 'vinted_reverse_scraped_ads', docId));
+        const snap = await getDoc(doc(this.db, 'advertisements', docId));
         if (!snap.exists()) return false;
 
         const data = snap.data() as Record<string, unknown>;
         const savedStatus = String(data?.listing_status || '');
-        const hasCoreFields = Boolean(data?.title) || Boolean(data?.description) || Array.isArray(data?.image_urls);
+        const hasCoreFields =
+            Boolean(data?.marka) ||
+            Boolean(data?.rodzaj) ||
+            Array.isArray(data?.photo_uris) ||
+            Boolean(data?.listing_url);
         return savedStatus === status && hasCoreFields;
     }
 
@@ -497,13 +501,38 @@ class VintedReverseScraper {
         const now = new Date().toISOString();
 
         const listingPayload = {
-            ...record,
+            id: safeDocId,
+            vinted_item_id: record.vinted_item_id,
+            marka: record.brand || '',
+            rodzaj: record.category || '',
+            typ: record.category || '',
+            rozmiar: record.size || '',
+            stan: record.condition || '',
+            wada: '',
+            color: record.color || '',
+            opis: record.description || '',
+            title: record.title || '',
+            listing_url: record.listing_url,
+            edit_url: record.edit_url,
+            listing_status: record.listing_status,
+            source_profile_url: record.source_profile_url || null,
+            price: record.price || '',
+            price_vinted: record.price || '',
+            photo_uris: record.image_urls || [],
+            photos: record.image_urls || [],
+            image_details: record.image_details || [],
+            is_reverse_scraped: true,
+            is_completed: true,
+            is_published_to_vinted: record.listing_status === 'active',
+            status: 'active',
+            scraped_at: record.scraped_at || now,
             user_id: userId || null,
+            created_at: now,
             updated_at: now,
         };
 
-        // Main reverse-scraped listing data (deduplicated by user + vinted item id).
-        await setDoc(doc(this.db, 'vinted_reverse_scraped_ads', safeDocId), listingPayload, { merge: true });
+        // Save directly to main advertisements collection (single source of truth).
+        await setDoc(doc(this.db, 'advertisements', safeDocId), listingPayload, { merge: true });
 
         // Separate links collection requested by user: one link record per listing, also deduplicated.
         await setDoc(

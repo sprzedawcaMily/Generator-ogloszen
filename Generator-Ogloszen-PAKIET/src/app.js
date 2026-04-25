@@ -1,4 +1,4 @@
-// Plik app.js nie jest już używany - zastąpiony przez main.js z integracją Supabase
+// Plik app.js nie jest już używany - zastąpiony przez main.js z integracją Firebase
 // Ten plik można usunąć
 
 function showMessage(text) {

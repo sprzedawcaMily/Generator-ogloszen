@@ -1262,7 +1262,7 @@ export class GrailedAutomation {
             
             // Map Polish colors to English Grailed colors
             const colorMapping: { [key: string]: string } = {
-                // Basic colors from Supabase
+                // Basic colors from Firebase
                 'Czarny': 'Black',
                 'Brązowy': 'Brown',
                 'Szary': 'Gray',
@@ -2080,8 +2080,8 @@ export class GrailedAutomation {
                 return;
             }
             
-            // Download photos from Supabase URLs and save locally
-            console.log('🔄 Downloading photos from Supabase...');
+            // Download photos from Firebase URLs and save locally
+            console.log('🔄 Downloading photos from Firebase...');
             const localPhotoPaths: string[] = [];
             
             // Ensure temp directory exists
@@ -2169,7 +2169,7 @@ export class GrailedAutomation {
         }
     }
 
-    // Save as draft and update Supabase status
+    // Save as draft and update Firebase status
     async saveAsDraft(advertisementId: string): Promise<void> {
         if (!this.page) throw new Error('Page not initialized');
         
@@ -2193,15 +2193,15 @@ export class GrailedAutomation {
             await delay(5000);
             console.log('✅ Save as Draft clicked successfully');
             
-            // Update Supabase status
-            console.log('🔄 Updating Supabase status...');
+            // Update Firebase status
+            console.log('🔄 Updating Firebase status...');
             const { updateGrailedPublishStatus } = await import('./supabaseFetcher');
             const result = await updateGrailedPublishStatus(advertisementId, true);
             
             if (result.success) {
-                console.log('✅ Supabase status updated: is_published_to_grailed = true');
+                console.log('✅ Firebase status updated: is_published_to_grailed = true');
             } else {
-                console.log('❌ Failed to update Supabase status:', result.message);
+                console.log('❌ Failed to update Firebase status:', result.message);
             }
             
         } catch (error) {
@@ -2265,7 +2265,7 @@ export class GrailedAutomation {
     async processGrailedListings(userId?: string): Promise<void> {
         await this.logger.info('📋 Starting to process Grailed listings...');
         
-        // Import supabase fetcher
+        // Import Firebase fetcher
         const { fetchUnpublishedToGrailedAdvertisements } = await import('./supabaseFetcher');
         
         // Fetch unpublished advertisements

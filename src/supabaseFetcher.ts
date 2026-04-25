@@ -8,8 +8,11 @@ import {
     getDoc,
     doc,
     updateDoc,
+    setDoc,
+    deleteDoc,
     addDoc,
     limit,
+    deleteField,
 } from 'firebase/firestore';
 
 const db = getFirestore(firebaseApp);
@@ -25,6 +28,154 @@ function toMillis(value: any): number {
     return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function normalizeSaleStatus(value: any): 'active' | 'sold' | 'archived' {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'sold' || normalized === 'sprzedany' || normalized === 'sprzedane') return 'sold';
+    if (normalized === 'archived' || normalized === 'zarchiwizowany') return 'archived';
+    return 'active';
+}
+
+function isSoldAdvertisement(ad: AnyRecord): boolean {
+    if (ad?.is_sold === true || ad?.isSold === true || ad?.sold === true) return true;
+    return normalizeSaleStatus(ad?.status ?? ad?.sale_status ?? ad?.listing_status) === 'sold';
+}
+
+async function optimizePhotoValue(photo: string): Promise<string> {
+    const value = String(photo || '').trim();
+    if (!value) return '';
+
+    const dataUriMatch = value.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+    if (!dataUriMatch?.[1]) {
+        // For URL-based photos there is nothing to compress in Firestore payload.
+        return value;
+    }
+
+    try {
+        const sharpModule = await import('sharp');
+        const sharp = sharpModule.default;
+        const originalBuffer = Buffer.from(dataUriMatch[1], 'base64');
+        const optimizedBuffer = await sharp(originalBuffer)
+            .rotate()
+            .resize({ width: 1280, withoutEnlargement: true })
+            .jpeg({ quality: 55, mozjpeg: true })
+            .toBuffer();
+        const optimized = `data:image/jpeg;base64,${optimizedBuffer.toString('base64')}`;
+        return optimized.length < value.length ? optimized : value;
+    } catch (error) {
+        console.warn('Failed to optimize base64 image payload, keeping original image', error);
+        return value;
+    }
+}
+
+async function optimizeSoldAdByDocId(docId: string, ad: AnyRecord) {
+    const firstPhotoRaw = Array.isArray(ad?.photo_uris) && ad.photo_uris.length > 0
+        ? ad.photo_uris[0]
+        : Array.isArray(ad?.photos) && ad.photos.length > 0
+            ? ad.photos[0]
+            : '';
+    const firstPhoto = await optimizePhotoValue(String(firstPhotoRaw || ''));
+    const optimizedPhotos = firstPhoto ? [firstPhoto] : [];
+
+    const payload: AnyRecord = {
+        photo_uris: optimizedPhotos,
+        photos: deleteField(),
+        storage_optimized: true,
+        storage_optimized_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+    };
+
+    if (Array.isArray(ad?.image_details) && ad.image_details.length > 0) {
+        payload.image_details = deleteField();
+    }
+
+    await updateDoc(doc(db, 'advertisements', docId), payload);
+    return {
+        success: true,
+        kept_photos: optimizedPhotos.length,
+        optimized_photo_payload: firstPhotoRaw !== firstPhoto,
+    };
+}
+
+async function archiveSoldAdvertisement(docId: string, ad: AnyRecord, soldAtIso: string) {
+    const firstPhotoRaw = Array.isArray(ad?.photo_uris) && ad.photo_uris.length > 0
+        ? ad.photo_uris[0]
+        : Array.isArray(ad?.photos) && ad.photos.length > 0
+            ? ad.photos[0]
+            : '';
+    const firstPhoto = await optimizePhotoValue(String(firstPhotoRaw || ''));
+
+    const archivePayload: AnyRecord = {
+        source_advertisement_doc_id: docId,
+        id: ad?.id || docId,
+        user_id: ad?.user_id || null,
+        marka: ad?.marka || null,
+        rodzaj: ad?.rodzaj || null,
+        typ: ad?.typ || null,
+        rozmiar: ad?.rozmiar || null,
+        stan: ad?.stan || null,
+        wada: ad?.wada || null,
+        color: ad?.color || null,
+        price: ad?.price || null,
+        price_vinted: ad?.price_vinted || null,
+        price_grailed: ad?.price_grailed || null,
+        is_completed: ad?.is_completed === true,
+        is_published_to_vinted: ad?.is_published_to_vinted === true,
+        is_published_to_grailed: ad?.is_published_to_grailed === true,
+        Vinted_URL: ad?.Vinted_URL || null,
+        listing_status: ad?.listing_status || null,
+        status: 'sold',
+        sold_at: ad?.sold_at || soldAtIso,
+        created_at: ad?.created_at || null,
+        updated_at: soldAtIso,
+        archived_at: soldAtIso,
+        photo_uris: firstPhoto ? [firstPhoto] : [],
+        photos: deleteField(),
+        storage_optimized: true,
+        storage_optimized_at: soldAtIso,
+    };
+
+    await setDoc(doc(db, 'sold_advertisements', docId), archivePayload, { merge: true });
+}
+
+function requiresSoldStorageOptimization(ad: AnyRecord): boolean {
+    if (!isSoldAdvertisement(ad)) return false;
+
+    const photos = Array.isArray(ad?.photo_uris)
+        ? ad.photo_uris
+        : Array.isArray(ad?.photos)
+            ? ad.photos
+            : [];
+    const hasImageDetails = Array.isArray(ad?.image_details) && ad.image_details.length > 0;
+    const firstPhoto = String((photos[0] || '')).trim();
+    const base64Photo = /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(firstPhoto);
+
+    if (photos.length > 1) return true;
+    if (hasImageDetails) return true;
+    if (base64Photo && ad?.storage_optimized !== true) return true;
+    return false;
+}
+
+function triggerAutomaticSoldOptimization(rows: AnyRecord[]) {
+    const candidates = rows.filter(requiresSoldStorageOptimization).slice(0, 3);
+    if (candidates.length === 0) return;
+
+    (async () => {
+        for (const ad of candidates) {
+            try {
+                const adId = String(ad?.id || '');
+                if (!adId) continue;
+                const docId = await findAdvertisementDocId(adId);
+                if (!docId) continue;
+                await optimizeSoldAdByDocId(docId, ad);
+            } catch (error) {
+                console.warn('Automatic sold optimization failed for one advertisement', error);
+            }
+        }
+    })().catch((error) => {
+        console.warn('Automatic sold optimization background task failed', error);
+    });
+}
+
 function normalizeAd(ad: AnyRecord): AnyRecord {
     const photoUris = Array.isArray(ad.photo_uris)
         ? ad.photo_uris
@@ -33,9 +184,17 @@ function normalizeAd(ad: AnyRecord): AnyRecord {
             : ad.photo_uris
                 ? [ad.photo_uris]
                 : [];
+    const explicitSold =
+        ad?.is_sold === true ||
+        ad?.isSold === true ||
+        ad?.sold === true;
+    const statusSource = explicitSold ? 'sold' : (ad?.status ?? ad?.sale_status ?? ad?.listing_status ?? '');
+    const normalizedStatus = normalizeSaleStatus(statusSource);
 
     return {
         ...ad,
+        status: normalizedStatus,
+        is_sold: normalizedStatus === 'sold',
         photo_uris: photoUris,
         photos: photoUris,
     };
@@ -45,11 +204,25 @@ function sortByCreatedAtDesc<T extends AnyRecord>(rows: T[]): T[] {
     return [...rows].sort((a, b) => toMillis(b.created_at) - toMillis(a.created_at));
 }
 
+function sortByBestTimelineDesc<T extends AnyRecord>(rows: T[]): T[] {
+    return [...rows].sort((a, b) => {
+        const aTs = toMillis(a.updated_at) || toMillis(a.created_at) || toMillis(a.scraped_at) || toMillis(a.sold_at);
+        const bTs = toMillis(b.updated_at) || toMillis(b.created_at) || toMillis(b.scraped_at) || toMillis(b.sold_at);
+        if (bTs !== aTs) return bTs - aTs;
+        const aId = String(a.id || a.source_advertisement_doc_id || a.title || '');
+        const bId = String(b.id || b.source_advertisement_doc_id || b.title || '');
+        return aId.localeCompare(bId);
+    });
+}
+
 function sortByTimestampDesc<T extends AnyRecord>(rows: T[], fields: string[]): T[] {
     return [...rows].sort((a, b) => {
         const aTs = fields.map((f) => toMillis(a[f])).find((x) => x > 0) || 0;
         const bTs = fields.map((f) => toMillis(b[f])).find((x) => x > 0) || 0;
-        return bTs - aTs;
+        if (bTs !== aTs) return bTs - aTs;
+        const aId = String(a.id || a.source_advertisement_doc_id || a.title || '');
+        const bId = String(b.id || b.source_advertisement_doc_id || b.title || '');
+        return aId.localeCompare(bId);
     });
 }
 
@@ -159,7 +332,9 @@ export async function fetchAdvertisements(userId?: string) {
     try {
         const constraints = userId ? [where('user_id', '==', userId)] : [];
         const rows = await readCollection('advertisements', constraints);
-        return sortByCreatedAtDesc(rows.map(normalizeAd));
+        const activeRows = rows.filter((row) => !isSoldAdvertisement(row));
+        triggerAutomaticSoldOptimization(rows);
+        return sortByBestTimelineDesc(activeRows.map(normalizeAd));
     } catch (error) {
         console.error('Error in fetchAdvertisements:', error);
         return [];
@@ -171,7 +346,9 @@ export async function fetchCompletedAdvertisements(userId?: string) {
         const constraints = [where('is_completed', '==', true)];
         if (userId) constraints.push(where('user_id', '==', userId));
         const rows = await readCollection('advertisements', constraints);
-        return sortByCreatedAtDesc(rows.map(normalizeAd));
+        const activeRows = rows.filter((row) => !isSoldAdvertisement(row));
+        triggerAutomaticSoldOptimization(rows);
+        return sortByBestTimelineDesc(activeRows.map(normalizeAd));
     } catch (error) {
         console.error('Error in fetchCompletedAdvertisements:', error);
         return [];
@@ -183,7 +360,8 @@ export async function fetchIncompleteAdvertisements(userId?: string) {
         const constraints = [where('is_completed', '==', false)];
         if (userId) constraints.push(where('user_id', '==', userId));
         const rows = await readCollection('advertisements', constraints);
-        return sortByCreatedAtDesc(rows.map(normalizeAd));
+        const activeRows = rows.filter((row) => !isSoldAdvertisement(row));
+        return sortByBestTimelineDesc(activeRows.map(normalizeAd));
     } catch (error) {
         console.error('Error in fetchIncompleteAdvertisements:', error);
         return [];
@@ -192,12 +370,15 @@ export async function fetchIncompleteAdvertisements(userId?: string) {
 
 export async function fetchUnpublishedToVintedAdvertisements(userId?: string) {
     try {
-        const constraints = [where('is_published_to_vinted', '==', false)];
-        if (userId) constraints.push(where('user_id', '==', userId));
+        // Uwaga: część starych rekordów nie ma pola is_published_to_vinted.
+        // W UI są traktowane jako "nieopublikowane", więc tutaj robimy to samo.
+        const constraints = userId ? [where('user_id', '==', userId)] : [];
 
         const rows = await readCollection('advertisements', constraints);
         const valid = rows
+            .filter((ad) => !isSoldAdvertisement(ad))
             .map(normalizeAd)
+            .filter((ad) => ad.is_published_to_vinted !== true)
             .filter((ad) => ad.marka && ad.rodzaj && ad.rozmiar && ad.stan && ad.photo_uris?.length > 0);
 
         return sortByCreatedAtDesc(valid);
@@ -217,6 +398,7 @@ export async function fetchUnpublishedToGrailedAdvertisements(userId?: string) {
 
         const rows = await readCollection('advertisements', constraints);
         const valid = rows
+            .filter((ad) => !isSoldAdvertisement(ad))
             .map(normalizeAd)
             .filter((ad) => ad.marka && ad.rodzaj && ad.rozmiar && ad.stan && ad.photo_uris?.length > 0);
 
@@ -278,12 +460,24 @@ export async function fetchDescriptionHeaders(platform?: string, userId?: string
 
 export async function fetchReverseScrapedAdvertisements(userId?: string) {
     try {
-        const constraints = userId ? [where('user_id', '==', userId)] : [];
-        const rows = await readCollection('vinted_reverse_scraped_ads', constraints);
-        const normalized = rows.map(normalizeReverseScrapedAd);
-        return sortByTimestampDesc(normalized, ['scraped_at', 'updated_at', 'created_at']);
+        const constraints = [where('is_reverse_scraped', '==', true)];
+        if (userId) constraints.push(where('user_id', '==', userId));
+        const rows = await readCollection('advertisements', constraints);
+        return sortByTimestampDesc(rows.map(normalizeAd), ['scraped_at', 'updated_at', 'created_at']);
     } catch (error) {
         console.error('Error in fetchReverseScrapedAdvertisements:', error);
+        return [];
+    }
+}
+
+export async function fetchSoldAdvertisements(userId?: string) {
+    try {
+        const constraints = userId ? [where('user_id', '==', userId)] : [];
+        const rows = await readCollection('sold_advertisements', constraints);
+        const soldOnly = rows.filter(isSoldAdvertisement);
+        return sortByTimestampDesc(soldOnly.map(normalizeAd), ['sold_at', 'archived_at', 'updated_at', 'created_at']);
+    } catch (error) {
+        console.error('Error in fetchSoldAdvertisements:', error);
         return [];
     }
 }
@@ -401,7 +595,10 @@ export async function updateVintedPublishStatus(advertisementId: string, isPubli
         const docId = await findAdvertisementDocId(advertisementId);
         if (!docId) return false;
 
-        await updateDoc(doc(db, 'advertisements', docId), { is_published_to_vinted: isPublished });
+        await updateDoc(doc(db, 'advertisements', docId), {
+            is_published_to_vinted: isPublished,
+            listing_status: isPublished ? 'active' : 'draft'
+        });
         return true;
     } catch (error) {
         console.error('Error in updateVintedPublishStatus:', error);
@@ -423,12 +620,134 @@ export async function toggleVintedPublishStatus(advertisementId: string) {
 
         const current = (snap.data() as AnyRecord).is_published_to_vinted === true;
         const next = !current;
-        await updateDoc(doc(db, 'advertisements', docId), { is_published_to_vinted: next });
+        await updateDoc(doc(db, 'advertisements', docId), {
+            is_published_to_vinted: next,
+            listing_status: next ? 'active' : 'draft'
+        });
 
         return { success: true, is_published_to_vinted: next };
     } catch (error) {
         console.error('Error in toggleVintedPublishStatus:', error);
         return { success: false, message: 'Błąd serwera' };
+    }
+}
+
+export async function toggleAdvertisementSoldStatus(advertisementId: string) {
+    try {
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
+        }
+
+        const adRef = doc(db, 'advertisements', docId);
+        const snap = await getDoc(adRef);
+        if (!snap.exists()) {
+            return { success: false, message: 'Nie znaleziono ogłoszenia' };
+        }
+
+        const currentStatus = normalizeSaleStatus((snap.data() as AnyRecord).status);
+        if (currentStatus === 'sold') {
+            return {
+                success: false,
+                status: 'sold',
+                is_sold: true,
+                message: 'Ogłoszenie jest już oznaczone jako sprzedane i nie może zostać cofnięte',
+            };
+        }
+        const nextStatus = 'sold';
+        const soldAtIso = new Date().toISOString();
+        await updateDoc(adRef, {
+            status: nextStatus,
+            sold_at: soldAtIso,
+            updated_at: soldAtIso,
+        });
+
+        const sourceAd = { ...(snap.data() as AnyRecord), status: nextStatus, sold_at: soldAtIso };
+        await archiveSoldAdvertisement(docId, sourceAd, soldAtIso);
+        await deleteDoc(adRef);
+
+        return {
+            success: true,
+            status: nextStatus,
+            is_sold: nextStatus === 'sold',
+            archived: true,
+            removed_from_active_collection: true,
+        };
+    } catch (error) {
+        console.error('Error in toggleAdvertisementSoldStatus:', error);
+        return { success: false, message: 'Błąd serwera' };
+    }
+}
+
+export async function optimizeAdvertisementStorage(advertisementId: string) {
+    try {
+        const docId = await findAdvertisementDocId(advertisementId);
+        if (!docId) return { success: false, message: 'Nie znaleziono ogłoszenia' };
+
+        const snap = await getDoc(doc(db, 'advertisements', docId));
+        if (!snap.exists()) return { success: false, message: 'Nie znaleziono ogłoszenia' };
+
+        const ad = snap.data() as AnyRecord;
+        if (!isSoldAdvertisement(ad)) {
+            return { success: false, message: 'Ogłoszenie nie jest oznaczone jako sprzedane' };
+        }
+
+        return await optimizeSoldAdByDocId(docId, ad);
+    } catch (error) {
+        console.error('Error in optimizeAdvertisementStorage:', error);
+        return { success: false, message: 'Błąd serwera podczas optymalizacji' };
+    }
+}
+
+export async function optimizeAllSoldAdvertisements(userId?: string) {
+    try {
+        const constraints = userId ? [where('user_id', '==', userId)] : [];
+        const rows = await readCollection('advertisements', constraints);
+        const soldAds = rows.filter(isSoldAdvertisement);
+
+        let optimizedCount = 0;
+        for (const ad of soldAds) {
+            const docId = String(ad.id);
+            const result = await optimizeSoldAdByDocId(docId, ad);
+            if (result.success) optimizedCount += 1;
+        }
+
+        return {
+            success: true,
+            scanned: rows.length,
+            sold_found: soldAds.length,
+            optimized: optimizedCount,
+        };
+    } catch (error) {
+        console.error('Error in optimizeAllSoldAdvertisements:', error);
+        return { success: false, message: 'Błąd serwera podczas masowej optymalizacji' };
+    }
+}
+
+export async function migrateSoldAdvertisementsToArchive(userId?: string) {
+    try {
+        const constraints = userId ? [where('user_id', '==', userId)] : [];
+        const rows = await readCollection('advertisements', constraints);
+        const soldRows = rows.filter(isSoldAdvertisement);
+
+        let migrated = 0;
+        for (const ad of soldRows) {
+            const docId = String(ad.id);
+            const soldAtIso = ad?.sold_at ? String(ad.sold_at) : new Date().toISOString();
+            await archiveSoldAdvertisement(docId, ad, soldAtIso);
+            await deleteDoc(doc(db, 'advertisements', docId));
+            migrated += 1;
+        }
+
+        return {
+            success: true,
+            scanned: rows.length,
+            sold_found: soldRows.length,
+            migrated,
+        };
+    } catch (error) {
+        console.error('Error in migrateSoldAdvertisementsToArchive:', error);
+        return { success: false, message: 'Błąd serwera podczas migracji sprzedanych ogłoszeń' };
     }
 }
 

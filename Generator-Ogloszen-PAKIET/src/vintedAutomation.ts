@@ -40,11 +40,12 @@ export class VintedAutomation {
     private browser: Browser | null = null;
     private page: Page | null = null;
     private tempDir = path.join(process.cwd(), 'temp', 'photos');
+    private userId?: string;
 
     // Function to get shortened version of product type (copied from main.js)
     getShortenedProductType(rodzaj: string): string {
         if (!rodzaj) return '';
-        
+
         const typeMap: { [key: string]: string } = {
             'kurtka': 'Kurtka',
             'Koszule w kratkę': 'Koszula',
@@ -104,7 +105,7 @@ export class VintedAutomation {
             'Torby na ramię': 'Torba',
             'Portfele': 'Portfel'
         };
-        
+
         return typeMap[rodzaj] || rodzaj;
     }
 
@@ -112,12 +113,12 @@ export class VintedAutomation {
     private formatTitleWord(word: string): string {
         // Sprawdź czy wyraz składa się tylko z wielkich liter (bez cyfr)
         const hasOnlyUppercaseLetters = /^[A-Z\W]*$/.test(word) && /[A-Z]/.test(word) && !/\d/.test(word);
-        
+
         if (hasOnlyUppercaseLetters && word.length > 1) {
             // Kapitalizuj tylko pierwszą literę
             return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
         }
-        
+
         // Zostaw bez zmian jeśli ma mieszane wielkości liter lub zawiera cyfry
         return word;
     }
@@ -125,39 +126,52 @@ export class VintedAutomation {
     // Generuj tytuł według wzorca z main.js: {marka} {getShortenedProductType(rodzaj)} {rozmiar} {description_text}
     async generateTitle(ad: Advertisement): Promise<string> {
         const parts = [];
-        
+
         if (ad.marka) parts.push(this.formatTitleWord(ad.marka));
         if (ad.rodzaj) parts.push(this.formatTitleWord(this.getShortenedProductType(ad.rodzaj)));
         if (ad.rozmiar) parts.push(ad.rozmiar); // rozmiary zostają bez zmian
-        
+
         // Dodaj description_text ze style_templates na podstawie typu produktu
         try {
-            const specificStyle = await fetchStyleByType(ad.typ);
-            if (specificStyle && specificStyle.description_text) {
-                parts.push(this.formatTitleWord(specificStyle.description_text));
+            const lookupCandidates = [ad.typ, ad.rodzaj]
+                .map(v => (v || '').trim())
+                .filter(Boolean);
+
+            let specificStyle: any = null;
+            for (const lookupType of lookupCandidates) {
+                specificStyle = await fetchStyleByType(lookupType, this.userId);
+                if (specificStyle && specificStyle.description_text) {
+                    parts.push(this.formatTitleWord(specificStyle.description_text));
+                    console.log(`✅ Title style suffix matched for type: "${lookupType}"`);
+                    break;
+                }
+            }
+
+            if (!specificStyle || !specificStyle.description_text) {
+                console.log(`ℹ️ No title style suffix found for typ="${ad.typ || ''}" rodzaj="${ad.rodzaj || ''}"`);
             }
         } catch (error) {
-            console.log('Could not fetch style for type:', ad.typ);
+            console.log('Could not fetch style for title suffix:', error);
         }
-        
+
         return parts.join(' ');
     }
 
     // Generuj opis według wzorca z main.js z emoji i formatowaniem
-    async generateDescription(ad: Advertisement): Promise<string> {
+    async generateDescription(ad: Advertisement, userId?: string): Promise<string> {
         let description = '';
-        
+
         try {
             // Pobierz style i nagłówki opisów
             const [styles, descriptionHeaders, specificStyle] = await Promise.all([
-                fetchStyles(),
+                fetchStyles(userId),
                 // Use platform-specific headers for Vinted
-                fetchDescriptionHeaders('vinted'),
-                fetchStyleByType(ad.typ)
+                fetchDescriptionHeaders('vinted', userId),
+                fetchStyleByType(ad.typ, userId)
             ]);
-            
+
             const styleToUse = specificStyle || (styles && styles.length > 0 ? styles[0] : null);
-            
+
             // Dodaj nagłówek z tabeli description_headers (zaproszenie na Instagram)
             if (descriptionHeaders && descriptionHeaders.length > 0) {
                 const header = descriptionHeaders[0];
@@ -165,18 +179,18 @@ export class VintedAutomation {
                     description += `${header.title}\n\n`;
                 }
             }
-            
+
             // Tytuł produktu z gwiazdkami: 🌟 {marka} {rodzaj} {description_text} 🌟
             description += '🌟 ';
             if (ad.marka) description += ad.marka + ' ';
             if (ad.rodzaj) description += ad.rodzaj + ' ';
-            
+
             // Dodaj description_text ze style_templates na podstawie typu produktu
             if (styleToUse && styleToUse.description_text) {
                 description += styleToUse.description_text + ' ';
             }
             description += '🌟\n\n';
-            
+
             // Stan z emoji
             description += '📌 **Stan:** ';
             if (ad.stan) {
@@ -190,17 +204,17 @@ export class VintedAutomation {
                 description += 'Bez wad';
             }
             description += '\n';
-            
+
             // Rozmiar z emoji
             if (ad.rozmiar) {
                 description += `📏 **Rozmiar:** ${ad.rozmiar}\n`;
             }
-            
+
             // Kolor z emoji
             if (ad.color) {
                 description += `🎨 **Kolor:** ${ad.color}\n`;
             }
-            
+
             // Wymiary z emoji
             description += '📐 **Wymiary:**\n';
             if (ad.pas) {
@@ -218,33 +232,33 @@ export class VintedAutomation {
             if (ad.dlugosc_nogawki) {
                 description += `Nogawka ${ad.dlugosc_nogawki} cm\n`;
             }
-            
+
             description += '\n';
-            
+
             // Dodaj stopkę ze style_templates na podstawie typu produktu
             if (styleToUse && styleToUse.footer_text) {
                 description += `${styleToUse.footer_text}`;
             }
-            
+
         } catch (error) {
             console.error('Error generating description:', error);
             // Fallback do prostszego opisu
             description = this.generateSimpleDescription(ad);
         }
-        
+
         return description;
     }
 
     // Prosta wersja opisu jako fallback
     generateSimpleDescription(ad: Advertisement): string {
         const parts = [];
-        
+
         if (ad.marka) parts.push(`Marka: ${ad.marka}`);
         if (ad.rodzaj) parts.push(`Rodzaj: ${ad.rodzaj}`);
         if (ad.typ && ad.typ !== ad.marka) parts.push(`Typ: ${ad.typ}`);
         if (ad.rozmiar) parts.push(`Rozmiar: ${ad.rozmiar}`);
         if (ad.stan) parts.push(`Stan: ${ad.stan}`);
-        
+
         // Wymiary (jeśli dostępne)
         const dimensions = [];
         if (ad.dlugosc) dimensions.push(`długość ${ad.dlugosc}cm`);
@@ -252,15 +266,15 @@ export class VintedAutomation {
         if (ad.pas) dimensions.push(`pas ${ad.pas}cm`);
         if (ad.udo) dimensions.push(`udo ${ad.udo}cm`);
         if (ad.dlugosc_nogawki) dimensions.push(`długość nogawki ${ad.dlugosc_nogawki}cm`);
-        
+
         if (dimensions.length > 0) {
             parts.push(`Wymiary: ${dimensions.join(', ')}`);
         }
-        
+
         parts.push('');
         parts.push('Przedmiot w bardzo dobrym stanie, dokładnie opisany i sfotografowany.');
         parts.push('Zapraszam do zakupu! 😊');
-        
+
         return parts.join('\n');
     }
 
@@ -269,29 +283,66 @@ export class VintedAutomation {
         return {
             ...ad,
             title: await this.generateTitle(ad),
-            description: await this.generateDescription(ad),
+            description: await this.generateDescription(ad, this.userId),
             photos: ad.photo_uris || []
         };
+    }
+
+    private getSafeImageExtension(rawUrl: string): string {
+        try {
+            const parsed = new URL(rawUrl);
+            const ext = path.extname(parsed.pathname || '').toLowerCase().replace('.', '');
+            if (ext && /^[a-z0-9]{2,5}$/.test(ext)) {
+                return ext;
+            }
+        } catch {
+            // Fallback for non-standard URLs
+        }
+
+        const withoutQuery = rawUrl.split('?')[0].split('#')[0];
+        const fallbackExt = path.extname(withoutQuery || '').toLowerCase().replace('.', '');
+        if (fallbackExt && /^[a-z0-9]{2,5}$/.test(fallbackExt)) {
+            return fallbackExt;
+        }
+
+        return 'jpg';
+    }
+
+    private sanitizeFilename(filename: string): string {
+        return filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
     }
 
     async downloadImage(url: string, filename: string): Promise<string> {
         try {
             console.log(`📥 Downloading image: ${filename}`);
-            
+
             // Upewnij się że folder istnieje
             await mkdir(this.tempDir, { recursive: true });
-            
-            const response = await fetch(url);
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
             if (!response.ok) {
                 throw new Error(`Failed to download image: ${response.status}`);
             }
-            
+
             const arrayBuffer = await response.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
-            
+
+            if (!buffer || buffer.length === 0) {
+                throw new Error('Downloaded file is empty');
+            }
+
             const filePath = path.join(this.tempDir, filename);
             await writeFile(filePath, buffer);
-            
+
+            const stats = await fs.promises.stat(filePath);
+            if (!stats || stats.size === 0) {
+                throw new Error('Saved file is empty');
+            }
+
             console.log(`✅ Downloaded: ${filename}`);
             return filePath;
         } catch (error) {
@@ -302,51 +353,154 @@ export class VintedAutomation {
 
     async downloadImages(photoUrls: string[], rotations?: string[]): Promise<string[]> {
         const downloadedPaths: string[] = [];
-        
+
         for (let i = 0; i < photoUrls.length; i++) {
             const url = photoUrls[i];
-            const extension = url.split('.').pop()?.toLowerCase() || 'jpg';
-            const filename = `photo_${Date.now()}_${i + 1}.${extension}`;
-            
-            try {
-                // Pobierz zdjęcie
-                const filePath = await this.downloadImage(url, filename);
-                
-                // Sprawdź czy jest potrzebna rotacja
-                const rotation = rotations && rotations[i] ? parseInt(rotations[i]) : 0;
-                
-                if (rotation > 0) {
-                    console.log(`🔄 Rotating photo ${i + 1} by ${rotation} degrees...`);
-                    await this.rotateImage(filePath, rotation);
+            const extension = this.getSafeImageExtension(url);
+            const filename = this.sanitizeFilename(`photo_${Date.now()}_${i + 1}.${extension}`);
+
+            let downloaded = false;
+            let lastError: unknown = null;
+
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    // Pobierz zdjęcie
+                    const filePath = await this.downloadImage(url, filename);
+
+                    // Sprawdź czy jest potrzebna rotacja
+                    const rotation = rotations && rotations[i] ? parseInt(rotations[i]) : 0;
+
+                    if (rotation > 0) {
+                        console.log(`🔄 Rotating photo ${i + 1} by ${rotation} degrees...`);
+                        await this.rotateImage(filePath, rotation);
+                    }
+
+                    downloadedPaths.push(filePath);
+                    downloaded = true;
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    if (attempt < 3) {
+                        console.log(`🔁 Retry pobierania zdjęcia ${i + 1} (próba ${attempt + 1}/3)...`);
+                        await new Promise(resolve => setTimeout(resolve, 1200));
+                    }
                 }
-                
-                downloadedPaths.push(filePath);
-            } catch (error) {
-                console.error(`Failed to download image ${i + 1}:`, error);
-                // Kontynuuj z kolejnymi zdjęciami
+            }
+
+            if (!downloaded) {
+                throw new Error(`Failed to download image ${i + 1}: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
             }
         }
-        
+
         return downloadedPaths;
+    }
+
+    async getUploadedPhotosCount(): Promise<number> {
+        if (!this.page) return 0;
+
+        try {
+            return await this.page.evaluate(() => {
+                const fileInput = document.querySelector('input[type="file"], input[accept*="image"]') as HTMLInputElement | null;
+                if (!fileInput) return 0;
+
+                let uploadRoot: Element | null = fileInput;
+                let guard = 0;
+                while (uploadRoot && guard < 10) {
+                    const html = uploadRoot as HTMLElement;
+                    const marker = `${html.className || ''} ${html.getAttribute('data-testid') || ''}`.toLowerCase();
+                    if (marker.includes('photo') || marker.includes('image') || marker.includes('media') || uploadRoot.tagName === 'FORM') {
+                        break;
+                    }
+                    uploadRoot = uploadRoot.parentElement;
+                    guard += 1;
+                }
+
+                const scopedRoot = uploadRoot || fileInput.parentElement || document.body;
+                const imageNodes = Array.from(scopedRoot.querySelectorAll('img'));
+                const imageUrls = new Set<string>();
+
+                for (const node of imageNodes) {
+                    if (!(node instanceof HTMLImageElement)) continue;
+                    const src = (node.getAttribute('src') || '').trim();
+                    if (!src) continue;
+                    if (src.startsWith('blob:') || src.startsWith('data:image') || src.includes('item_photos') || src.includes('vinted')) {
+                        imageUrls.add(src);
+                    }
+                }
+
+                const removableCount = scopedRoot.querySelectorAll('button[aria-label*="usu" i], button[aria-label*="remove" i], button[aria-label*="delete" i]').length;
+                const scopedCount = Math.max(imageUrls.size, removableCount);
+                if (scopedCount > 0) return scopedCount;
+
+                // Fallback: policz globalnie przyciski usuwania powiązane z kontenerami zdjęć
+                const buttons = Array.from(document.querySelectorAll('button, [role="button"]')) as HTMLElement[];
+                let globalRemovableCount = 0;
+                for (const button of buttons) {
+                    const label = `${button.getAttribute('aria-label') || ''} ${button.textContent || ''}`.toLowerCase();
+                    const wantsRemove = label.includes('usu') || label.includes('remove') || label.includes('delete');
+                    if (!wantsRemove) continue;
+
+                    const scopedContainer = button.closest('[data-testid*="photo" i], [data-testid*="image" i], [class*="photo" i], [class*="image" i], [class*="media" i]');
+                    if (!scopedContainer) continue;
+                    globalRemovableCount += 1;
+                }
+
+                return globalRemovableCount;
+            });
+        } catch {
+            return 0;
+        }
+    }
+
+    async clearExistingUploadedPhotos() {
+        if (!this.page) return;
+
+        try {
+            const removedCount = await this.page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button, [role="button"]')) as HTMLElement[];
+                let removed = 0;
+
+                for (const button of buttons) {
+                    const label = `${button.getAttribute('aria-label') || ''} ${button.textContent || ''}`.toLowerCase();
+                    const wantsRemove = label.includes('usu') || label.includes('remove') || label.includes('delete');
+                    if (!wantsRemove) continue;
+
+                    const scopedContainer = button.closest('[data-testid*="photo" i], [data-testid*="image" i], [class*="photo" i], [class*="image" i], [class*="media" i]');
+                    if (!scopedContainer) continue;
+
+                    button.click();
+                    removed += 1;
+                }
+
+                return removed;
+            });
+
+            if (removedCount > 0) {
+                console.log(`🧹 Removed ${removedCount} old uploaded photos before new ad`);
+                await new Promise(resolve => setTimeout(resolve, 1200));
+            }
+        } catch (error) {
+            console.log('⚠️  Could not clean previous uploaded photos, continuing...');
+        }
     }
 
     async rotateImage(filePath: string, degrees: number): Promise<void> {
         try {
             const originalBuffer = await fs.promises.readFile(filePath);
-            
+
             let sharpImage = sharp(originalBuffer);
-            
+
             // Normalizuj orientację EXIF
             sharpImage = sharpImage.rotate();
-            
+
             // Zastosuj dodatkową rotację
             if (degrees > 0) {
                 sharpImage = sharpImage.rotate(degrees);
             }
-            
+
             const rotatedBuffer = await sharpImage.jpeg({ quality: 90 }).toBuffer();
             await fs.promises.writeFile(filePath, rotatedBuffer);
-            
+
             console.log(`✅ Photo rotated by ${degrees} degrees`);
         } catch (error) {
             console.error(`❌ Error rotating image: ${error}`);
@@ -376,7 +530,7 @@ export class VintedAutomation {
             console.log('🔗 Łączenie z istniejącą przeglądarką...');
             console.log('💡 Otwórz najpierw Chrome i zaloguj się na Vinted!');
             console.log('');
-            
+
             this.browser = await puppeteer.launch({
                 headless: false,
                 defaultViewport: null,
@@ -421,33 +575,33 @@ export class VintedAutomation {
                 ]
             });
         }
-        
+
         this.page = await this.browser.newPage();
-        
+
         // Ustaw User Agent jak w normalnej przeglądarce
         await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
+
         // Usuń właściwości, które wskazują na automatyzację
         await this.page.evaluateOnNewDocument(() => {
             // Ukryj webdriver property
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined,
             });
-            
+
             // Zmień właściwości które wskazują na headless
             Object.defineProperty(navigator, 'plugins', {
                 get: () => [1, 2, 3, 4, 5],
             });
-            
+
             Object.defineProperty(navigator, 'languages', {
                 get: () => ['pl-PL', 'pl', 'en-US', 'en'],
             });
-            
+
             // Dodaj chrome runtime
             (window as any).chrome = {
                 runtime: {},
             };
-            
+
             // Usuń automation flag
             try {
                 delete (navigator as any).__proto__.webdriver;
@@ -455,7 +609,7 @@ export class VintedAutomation {
                 // Ignore if can't delete
             }
         });
-        
+
         // Ustaw dodatkowe headers
         await this.page.setExtraHTTPHeaders({
             'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -464,7 +618,7 @@ export class VintedAutomation {
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
         });
-        
+
         // Ustaw viewport na typowy rozmiar ekranu
         await this.page.setViewport({
             width: 1366,
@@ -476,27 +630,28 @@ export class VintedAutomation {
     async connectToExistingBrowser() {
         try {
             console.log('🔗 Próbuję połączyć z istniejącą przeglądarką...');
-            
+
             // Sprawdź czy port 9222 jest dostępny
             const isPortOpen = await this.checkDebugPort();
             if (!isPortOpen) {
                 console.log('📡 Port 9222 nie jest dostępny');
                 return false;
             }
-            
+
             // Połącz z Chrome uruchomionym z debug portem
             this.browser = await puppeteer.connect({
                 browserURL: 'http://localhost:9222',
                 defaultViewport: null
             });
-            
+
             const pages = await this.browser.pages();
-            
-            // Znajdź kartę z Vinted lub utwórz nową
-            let vintedPage = pages.find(page => 
-                page.url().includes('vinted.pl')
-            );
-            
+
+            // Znajdź najnowszą kartę z Vinted lub utwórz nową
+            const vintedPage = [...pages].reverse().find(page => {
+                const url = page.url();
+                return url.includes('vinted.pl') || url.includes('vinted.com');
+            });
+
             if (vintedPage) {
                 console.log('✅ Znaleziono kartę z Vinted');
                 this.page = vintedPage;
@@ -504,12 +659,12 @@ export class VintedAutomation {
                 console.log('📄 Tworzę nową kartę dla Vinted');
                 this.page = await this.browser.newPage();
             }
-            
+
             // Dodaj obsługę dialogów na stronie
             if (this.page) {
                 // Usuń poprzednie listenery jeśli istnieją
                 this.page.removeAllListeners('dialog');
-                
+
                 this.page.on('dialog', async (dialog) => {
                     console.log(`🔔 Dialog detected: ${dialog.message()}`);
                     try {
@@ -519,7 +674,7 @@ export class VintedAutomation {
                     }
                 });
             }
-            
+
             console.log('✅ Pomyślnie połączono z istniejącą przeglądarką');
             return true;
         } catch (error) {
@@ -529,26 +684,82 @@ export class VintedAutomation {
         }
     }
 
+    private async refreshActivePageReference(): Promise<void> {
+        try {
+            if (!this.browser) {
+                return;
+            }
+
+            const pages = await this.browser.pages();
+            const availablePages = pages.filter(p => !p.isClosed());
+
+            if (availablePages.length === 0) {
+                return;
+            }
+
+            const preferredPage = [...availablePages].reverse().find(page => {
+                const url = page.url();
+                return url.includes('vinted.pl') || url.includes('vinted.com') || url.includes('accounts.google.com');
+            }) || this.page || availablePages[availablePages.length - 1];
+
+            if (!this.page || this.page.isClosed() || this.page !== preferredPage) {
+                this.page = preferredPage;
+            }
+        } catch {
+            // Ignoruj - jeśli nie da się odświeżyć referencji, kolejne kroki zrobią retry
+        }
+    }
+
+    private isTransientFrameError(error: unknown): boolean {
+        const message = error instanceof Error ? error.message : String(error);
+        return (
+            message.includes('detached Frame') ||
+            message.includes('Execution context was destroyed') ||
+            message.includes('Cannot find context with specified id')
+        );
+    }
+
     async checkDebugPort(): Promise<boolean> {
         try {
             console.log('🔍 Sprawdzam port 9222...');
-            
+
             // Sprawdź kilka razy z większymi przerwami
             for (let i = 0; i < 3; i++) {
                 try {
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 5000);
-                    
+
                     const response = await fetch('http://localhost:9222/json/version', {
                         method: 'GET',
                         signal: controller.signal
                     });
-                    
+
                     clearTimeout(timeoutId);
-                    
+
                     if (response.ok) {
-                        console.log('✅ Port 9222 dostępny');
-                        return true;
+                        const data = await response.json() as {
+                            Browser?: string;
+                            'User-Agent'?: string;
+                            webSocketDebuggerUrl?: string;
+                        };
+
+                        const browserName = data?.Browser || '';
+                        const userAgent = data?.['User-Agent'] || '';
+                        const wsDebugger = data?.webSocketDebuggerUrl || '';
+                        const looksLikeDevTools = wsDebugger.includes('/devtools/browser/');
+                        const looksLikeChrome = /Chrome|Chromium|Edg/i.test(browserName);
+                        const isHeadless = /HeadlessChrome/i.test(browserName) || /HeadlessChrome/i.test(userAgent);
+
+                        if (looksLikeDevTools && looksLikeChrome) {
+                            if (isHeadless) {
+                                console.log(`⚠️ Port 9222 zajęty przez HeadlessChrome (${browserName})`);
+                            } else {
+                                console.log(`✅ Port 9222 dostępny (${browserName})`);
+                            }
+                            return true;
+                        }
+
+                        console.log(`⚠️ Port 9222 odpowiada, ale to nie jest Chrome DevTools (Browser: ${browserName || 'brak'})`);
                     }
                 } catch (fetchError) {
                     if (i < 2) {
@@ -557,7 +768,7 @@ export class VintedAutomation {
                     }
                 }
             }
-            
+
             console.log('📡 Port 9222 nie jest dostępny');
             return false;
         } catch (error) {
@@ -567,12 +778,79 @@ export class VintedAutomation {
         }
     }
 
+    async cleanupHeadlessDebugPort(): Promise<void> {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const response = await fetch('http://localhost:9222/json/version', {
+                method: 'GET',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                return;
+            }
+
+            const data = await response.json() as {
+                Browser?: string;
+                'User-Agent'?: string;
+            };
+
+            const browserName = data?.Browser || '';
+            const userAgent = data?.['User-Agent'] || '';
+            const isHeadless = /HeadlessChrome/i.test(browserName) || /HeadlessChrome/i.test(userAgent);
+
+            if (!isHeadless) {
+                return;
+            }
+
+            console.log('🧹 Wykryto HeadlessChrome na porcie 9222 - zwalniam port...');
+
+            if (process.platform !== 'win32') {
+                console.log('⚠️ Automatyczne zwalnianie portu jest dostępne tylko na Windows');
+                return;
+            }
+
+            const { execSync } = await import('child_process');
+            const netstatOutput = execSync('netstat -ano -p tcp | findstr :9222', {
+                stdio: ['ignore', 'pipe', 'ignore']
+            }).toString();
+
+            const pids = Array.from(
+                new Set(
+                    netstatOutput
+                        .split(/\r?\n/)
+                        .map(line => line.trim())
+                        .filter(Boolean)
+                        .map(line => line.split(/\s+/).pop() || '')
+                        .filter(pid => /^\d+$/.test(pid))
+                )
+            );
+
+            for (const pid of pids) {
+                try {
+                    execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
+                    console.log(`🧹 Zamknięto proces PID ${pid} na porcie 9222`);
+                } catch {
+                    console.log(`⚠️ Nie udało się zamknąć procesu PID ${pid}`);
+                }
+            }
+
+            if (pids.length > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1200));
+            }
+        } catch {
+            // Ignoruj - port może być wolny lub tymczasowo niedostępny
+        }
+    }
+
     async initWithExistingBrowser() {
         console.log('🔍 Sprawdzenie czy Chrome jest uruchomiony z debug portem...');
-        
+
         // Sprawdź czy Chrome jest uruchomiony z debug portem
         const connected = await this.connectToExistingBrowser();
-        
+
         if (!connected) {
             console.log('❌ Nie znaleziono Chrome z debug portem');
             console.log('');
@@ -581,21 +859,21 @@ export class VintedAutomation {
             console.log('   2. Uruchom Chrome z debug portem (automatycznie...)');
             console.log('');
             console.log('🚀 Automatycznie uruchamiam Chrome z debug portem...');
-            
+
             const chromeStarted = await this.startChromeWithDebugPort();
-            
+
             if (chromeStarted) {
                 console.log('✅ Chrome został uruchomiony z debug portem');
                 console.log('⏳ Czekam na uruchomienie Chrome...');
-                
+
                 // Czekaj 3 sekundy na uruchomienie Chrome
                 await new Promise(resolve => setTimeout(resolve, 3000));
-                
+
                 console.log('� Próbuję połączyć się z uruchomionym Chrome...');
-                
+
                 // Spróbuj połączyć się ponownie
                 const reconnected = await this.connectToExistingBrowser();
-                
+
                 if (reconnected) {
                     console.log('✅ Pomyślnie połączono z Chrome!');
                     // Kontynuuj normalnie - nie rzucaj błędu
@@ -619,14 +897,14 @@ export class VintedAutomation {
                 throw new Error('Nie można uruchomić Chrome automatycznie');
             }
         }
-        
+
         console.log('✅ Połączono z Chrome z debug portem');
-        
+
         // Usuń właściwości automatyzacji
         if (this.page) {
             // Usuń poprzednie listenery jeśli istnieją
             this.page.removeAllListeners('dialog');
-            
+
             // Automatycznie obsługuj dialogi potwierdzenia
             this.page.on('dialog', async (dialog) => {
                 console.log(`🔔 Dialog detected: ${dialog.message()}`);
@@ -636,19 +914,19 @@ export class VintedAutomation {
                     console.log('ℹ️  Dialog already handled');
                 }
             });
-            
+
             await this.page.evaluateOnNewDocument(() => {
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined,
                 });
-                
+
                 (window as any).chrome = {
                     runtime: {},
                 };
-                
+
                 // Wyłącz beforeunload dialogi
                 window.addEventListener('beforeunload', (e) => {
-                    e.preventDefault = () => {};
+                    e.preventDefault = () => { };
                     delete e['returnValue'];
                 });
             });
@@ -660,15 +938,38 @@ export class VintedAutomation {
             // Najpierw sprawdź czy Chrome z debug portem już nie jest uruchomiony
             console.log('🔍 Sprawdzam czy Chrome z debug portem już jest uruchomiony...');
             const isAlreadyRunning = await this.checkDebugPort();
-            
+
             if (isAlreadyRunning) {
-                console.log('✅ Chrome z debug portem już jest uruchomiony!');
-                console.log('� Korzystam z istniejącej przeglądarki...');
-                return true;
+                let isHeadlessTarget = false;
+                try {
+                    const response = await fetch('http://localhost:9222/json/version');
+                    if (response.ok) {
+                        const data = await response.json() as {
+                            Browser?: string;
+                            'User-Agent'?: string;
+                        };
+                        const browserName = data?.Browser || '';
+                        const userAgent = data?.['User-Agent'] || '';
+                        isHeadlessTarget = /HeadlessChrome/i.test(browserName) || /HeadlessChrome/i.test(userAgent);
+                    }
+                } catch {
+                    // Jeśli nie udało się sprawdzić szczegółów, kontynuuj normalnie
+                }
+
+                if (!isHeadlessTarget) {
+                    console.log('✅ Chrome z debug portem już jest uruchomiony!');
+                    console.log('� Korzystam z istniejącej przeglądarki...');
+                    return true;
+                }
+
+                console.log('⚠️ Wykryto HeadlessChrome na 9222 - uruchamiam normalne okno Chrome');
             }
-            
+
+            // Jeśli na porcie siedzi HeadlessChrome, zwolnij port przed uruchomieniem nowego okna
+            await this.cleanupHeadlessDebugPort();
+
             console.log('�🔧 Sprawdzam czy Chrome jest zainstalowany...');
-            
+
             // Możliwe ścieżki do Chrome na Windows
             const chromePaths = [
                 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -677,11 +978,11 @@ export class VintedAutomation {
                 `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
                 `${process.env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe`
             ];
-            
+
             // Znajdź Chrome przez sprawdzenie czy plik istnieje
             let chromePath = '';
             const fs = await import('fs');
-            
+
             console.log('🔍 Sprawdzam lokalizacje Chrome...');
             for (const path of chromePaths) {
                 try {
@@ -698,29 +999,28 @@ export class VintedAutomation {
                     // Kontynuuj szukanie
                 }
             }
-            
+
             if (!chromePath) {
                 console.log('❌ Nie znaleziono Chrome w standardowych lokalizacjach');
                 return false;
             }
-            
+
             console.log('🚀 Uruchamiam Chrome z debug portem...');
-            
+
             // Użyj stałego katalogu profilu, aby sesja Google/Vinted była zapamiętana.
-            const { execSync } = await import('child_process');
             const userDir = process.env.USERPROFILE || process.env.HOME || '.';
             let debugDir = `${userDir}\\AppData\\Local\\Kamochi\\chrome-debug-main-profile`;
-            
+
             try {
                 console.log(`📁 Tworzę katalog debug: ${debugDir}`);
-                execSync(`mkdir "${debugDir}"`, { stdio: 'ignore' });
+                fs.mkdirSync(debugDir, { recursive: true });
                 console.log(`✅ Utworzono katalog debug`);
             } catch (error) {
                 console.log('⚠️ Błąd tworzenia katalogu:', error);
                 // Spróbuj alternatywny stały katalog w bieżącym folderze
                 debugDir = `.\\chrome-debug-main-profile`;
                 try {
-                    execSync(`mkdir "${debugDir}"`, { stdio: 'ignore' });
+                    fs.mkdirSync(debugDir, { recursive: true });
                     console.log(`✅ Utworzono alternatywny katalog: ${debugDir}`);
                 } catch {
                     console.log('❌ Nie można utworzyć katalogu debug');
@@ -729,7 +1029,7 @@ export class VintedAutomation {
             }
 
             console.log('💾 Używam trwałego profilu Chrome - konto powinno pozostać zalogowane.');
-            
+
             // Uruchom Chrome z debug portem w tle
             console.log('🚀 Uruchamiam nowy Chrome z debug portem...');
             console.log(`📁 Używając katalogu: ${debugDir}`);
@@ -758,31 +1058,31 @@ export class VintedAutomation {
                 detached: false,
                 stdio: ['ignore', 'pipe', 'pipe']
             });
-            
+
             // Obsłuż błędy uruchamiania
             chromeProcess.on('error', (error) => {
                 console.log('❌ Błąd uruchamiania Chrome:', error);
             });
-            
+
             chromeProcess.stderr?.on('data', (data) => {
                 console.log('⚠️ Chrome stderr:', data.toString());
             });
-            
+
             chromeProcess.unref(); // Pozwól procesowi działać niezależnie
-            
+
             console.log('✅ Chrome uruchomiony z debug portem');
             console.log('⏳ Czekam 5 sekund na uruchomienie Chrome...');
             await new Promise(resolve => setTimeout(resolve, 5000));
-            
+
             // Sprawdź czy port 9222 jest dostępny po uruchomieniu
             console.log('🔄 Sprawdzam połączenie z Chrome...');
             const portCheck = await this.checkDebugPort();
-            
+
             if (!portCheck) {
                 console.log('⚠️ Chrome może potrzebować więcej czasu na uruchomienie');
                 console.log('⏳ Czekam dodatkowe 5 sekund...');
                 await new Promise(resolve => setTimeout(resolve, 5000));
-                
+
                 const secondCheck = await this.checkDebugPort();
                 if (!secondCheck) {
                     console.log('❌ Nie udało się połączyć z Chrome na porcie 9222');
@@ -792,11 +1092,11 @@ export class VintedAutomation {
                     console.log('');
                 }
             }
-            
+
             console.log('📱 Zaloguj się na Vinted w otwartej przeglądarce');
-            
+
             return true;
-            
+
         } catch (error) {
             console.log('❌ Błąd podczas uruchamiania Chrome:', error);
             return false;
@@ -805,14 +1105,14 @@ export class VintedAutomation {
 
     async openLoginPage() {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         console.log('🔐 Próbuję otworzyć stronę logowania...');
-        
+
         try {
             // Bezpośrednia nawigacja na stronę logowania
             console.log('🔄 Przechodzę na stronę logowania...');
             await this.page.goto('https://www.vinted.pl/member/sign_in', { waitUntil: 'networkidle2' });
-            
+
             await new Promise(resolve => setTimeout(resolve, 2000));
             console.log('📄 Strona logowania jest teraz otwarta');
             console.log('');
@@ -821,7 +1121,7 @@ export class VintedAutomation {
             console.log('   ✅ Sesja będzie zapisana w trwałym profilu Chrome');
             console.log('   ✅ Przy kolejnych uruchomieniach nie powinno wymagać ponownego logowania');
             console.log('');
-            
+
         } catch (error) {
             console.log('⚠️  Nie udało się automatycznie otworzyć strony logowania');
             console.log('🔧 Spróbuj ręcznie przejść na stronę logowania');
@@ -829,20 +1129,44 @@ export class VintedAutomation {
     }
 
     async checkIfLoggedIn(): Promise<boolean> {
-        if (!this.page) return false;
-        
+        await this.refreshActivePageReference();
+
+        if (!this.page || this.page.isClosed()) return false;
+
         try {
             const currentUrl = this.page.url();
-            
+            const isOnVinted = currentUrl.includes('vinted.pl') || currentUrl.includes('vinted.com');
+
             // Jeśli jesteś na stronie Google lub innych zewnętrznych stronach logowania
-            if (currentUrl.includes('accounts.google.com') || 
-                currentUrl.includes('facebook.com') || 
+            if (currentUrl.includes('accounts.google.com') ||
+                currentUrl.includes('facebook.com') ||
                 currentUrl.includes('login') ||
                 currentUrl.includes('sign_in')) {
                 console.log('📱 Wykryto stronę logowania - użytkownik nie jest zalogowany');
                 return false;
             }
-            
+
+            if (isOnVinted) {
+                try {
+                    const cookies = await this.page.cookies('https://www.vinted.pl');
+                    const cookieNames = cookies.map(c => c.name.toLowerCase());
+                    const hasSessionCookie = cookieNames.some(name =>
+                        name.includes('session') ||
+                        name.includes('access') ||
+                        name.includes('refresh') ||
+                        name.includes('member') ||
+                        name === 'v_uid'
+                    );
+
+                    if (hasSessionCookie) {
+                        console.log('✅ Wykryto cookies sesji Vinted');
+                        return true;
+                    }
+                } catch {
+                    // Ignoruj i kontynuuj kolejne heurystyki
+                }
+            }
+
             // Sprawdź czy istnieje element wskazujący na zalogowanie
             const loggedInIndicators = [
                 'button[data-testid="header-user-menu-button"]',
@@ -852,7 +1176,7 @@ export class VintedAutomation {
                 '[class*="user"]',
                 '[data-testid="user-menu-dropdown"]'
             ];
-            
+
             for (const selector of loggedInIndicators) {
                 try {
                     const element = await this.page.waitForSelector(selector, { timeout: 2000 });
@@ -864,43 +1188,65 @@ export class VintedAutomation {
                     // Kontynuuj sprawdzanie innych selektorów
                 }
             }
-            
+
             // Sprawdź przez JavaScript czy istnieje tekst wskazujący na zalogowanie
             const hasUserProfile = await this.page.evaluate(() => {
                 const texts = ['profil', 'konto', 'wyloguj', 'ustawienia'];
                 const allText = document.body.textContent?.toLowerCase() || '';
-                
+
                 // Upewnij się, że nie jesteś na stronie logowania
-                if (allText.includes('zaloguj się') || 
-                    allText.includes('sign in') || 
+                if (allText.includes('zaloguj się') ||
+                    allText.includes('sign in') ||
                     allText.includes('log in') ||
                     window.location.href.includes('accounts.google.com') ||
                     window.location.href.includes('facebook.com')) {
                     return false;
                 }
-                
+
                 return texts.some(text => allText.includes(text));
             });
-            
+
             if (hasUserProfile) {
                 console.log('✅ Znaleziono tekst wskazujący na zalogowanie');
                 return true;
             }
-            
+
             // Sprawdź czy NIE ma przycisku "Zaloguj się"
-            const hasLoginButton = await this.page.evaluate(() => {
+            const uiAuthState = await this.page.evaluate(() => {
                 const elements = Array.from(document.querySelectorAll('a, button'));
-                return elements.some(el => {
+                const hasLoginButton = elements.some(el => {
                     const text = el.textContent?.toLowerCase() || '';
-                    return text.includes('zaloguj') && text.includes('się');
+                    return (text.includes('zaloguj') && text.includes('się')) || text.includes('sign in') || text.includes('log in');
                 });
+
+                const hasAvatarLikeElement = !!document.querySelector(
+                    '[data-testid*="user"], [data-testid*="profile"], [data-testid*="avatar"], [class*="avatar"], img[alt*="avatar" i]'
+                );
+
+                return { hasLoginButton, hasAvatarLikeElement };
             });
-            
+
+            if (isOnVinted && uiAuthState.hasAvatarLikeElement) {
+                console.log('✅ Wykryto element profilu/avatar użytkownika');
+                return true;
+            }
+
             // Jeśli nie ma przycisku logowania i jest na Vinted, prawdopodobnie jest zalogowany
-            const isOnVinted = currentUrl.includes('vinted.pl') || currentUrl.includes('vinted.com');
-            return !hasLoginButton && isOnVinted;
-            
+            return !uiAuthState.hasLoginButton && isOnVinted;
+
         } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const isTransientFrameError =
+                message.includes('detached Frame') ||
+                message.includes('Execution context was destroyed') ||
+                message.includes('Cannot find context with specified id');
+
+            if (isTransientFrameError) {
+                console.log('ℹ️ Karta została odświeżona podczas sprawdzania logowania, ponawiam...');
+                await this.refreshActivePageReference();
+                return false;
+            }
+
             console.log('Błąd podczas sprawdzania stanu logowania:', error);
             return false;
         }
@@ -908,30 +1254,30 @@ export class VintedAutomation {
 
     async navigateToVinted() {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         console.log('📍 Navigating to Vinted main page...');
         await this.page.goto('https://www.vinted.pl', {
             waitUntil: 'networkidle2'
         });
-        
+
         // Czekaj na załadowanie strony
         await new Promise(resolve => setTimeout(resolve, 3000));
-        
+
         // Sprawdź czy jesteś zalogowany
         const isLoggedIn = await this.checkIfLoggedIn();
-        
+
         if (!isLoggedIn) {
             console.log('⚠️  Nie jesteś zalogowany na Vinted!');
-            
+
             // Spróbuj otworzyć stronę logowania
             await this.openLoginPage();
-            
+
             console.log('📝 Zaloguj się ręcznie w przeglądarce...');
             console.log('⏳ Czekam 90 sekund na zalogowanie...');
-            
+
             // Czekaj dłużej na ręczne zalogowanie
             await new Promise(resolve => setTimeout(resolve, 90000));
-            
+
             // Sprawdź ponownie
             const isLoggedInAfterWait = await this.checkIfLoggedIn();
             if (!isLoggedInAfterWait) {
@@ -943,32 +1289,32 @@ export class VintedAutomation {
                 console.log('   - Sprawdzić czy nie ma captcha');
                 console.log('');
                 console.log('⏳ Czekam jeszcze 30 sekund...');
-                
+
                 await new Promise(resolve => setTimeout(resolve, 30000));
-                
+
                 const finalCheck = await this.checkIfLoggedIn();
                 if (!finalCheck) {
                     throw new Error('Nie udało się zalogować. Proszę zaloguj się ręcznie i uruchom ponownie.');
                 }
             }
         }
-        
+
         console.log('✅ Zalogowany pomyślnie!');
     }
 
     async navigateToNewListing() {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         console.log('🔄 Navigating to new listing page...');
-        
+
         try {
             // Najpierw sprawdź czy już jesteśmy na właściwej stronie
             const currentUrl = this.page.url();
             console.log(`📍 Current URL: ${currentUrl}`);
-            
+
             if (currentUrl.includes('/items/new')) {
                 console.log('💡 Already on new listing page, checking form...');
-                
+
                 // Sprawdź czy formularz jest już dostępny - różne selektory
                 const formSelectors = [
                     '[data-testid="item-upload-photo-section"]',  // stary selektor
@@ -976,7 +1322,7 @@ export class VintedAutomation {
                     'button .web_ui__Button__label:text("Dodaj zdjęcia")',  // przycisk
                     '.web_ui__Button__label:contains("Dodaj zdjęcia")'      // alternatywny
                 ];
-                
+
                 let formExists = false;
                 for (const selector of formSelectors) {
                     try {
@@ -990,25 +1336,25 @@ export class VintedAutomation {
                         // Kontynuuj z następnym selektorem
                     }
                 }
-                
+
                 if (formExists) {
                     console.log('✅ Form already ready, no navigation needed');
                     return;
                 }
             }
-            
+
             // Przejdź bezpośrednio na stronę dodawania ogłoszenia
             console.log('🌐 Navigating to fresh listing page...');
-            await this.page.goto('https://www.vinted.pl/items/new', { 
+            await this.page.goto('https://www.vinted.pl/items/new', {
                 waitUntil: 'networkidle2',
-                timeout: 30000 
+                timeout: 30000
             });
-            
+
             console.log('✅ New listing page loaded');
-            
+
             // Daj stronie więcej czasu na pełne załadowanie
             await new Promise(resolve => setTimeout(resolve, 2000));
-            
+
             // Sprawdź czy formularz się załadował z retry logic
             let retries = 3;
             while (retries > 0) {
@@ -1020,7 +1366,7 @@ export class VintedAutomation {
                         'button:has(.web_ui__Button__label:text("Dodaj zdjęcia"))',  // przycisk
                         '.web_ui__Button__label'                      // ogólny selektor przycisku
                     ];
-                    
+
                     let formFound = false;
                     for (const selector of formSelectors) {
                         try {
@@ -1032,7 +1378,7 @@ export class VintedAutomation {
                             // Spróbuj następny selektor
                         }
                     }
-                    
+
                     if (formFound) {
                         console.log('✅ New listing form ready');
                         return;
@@ -1042,7 +1388,7 @@ export class VintedAutomation {
                 } catch (error) {
                     retries--;
                     console.log(`⚠️  Photo section not found, retries left: ${retries}`);
-                    
+
                     if (retries > 0) {
                         // Odśwież stronę i spróbuj ponownie
                         console.log('🔄 Refreshing page and trying again...');
@@ -1059,7 +1405,7 @@ export class VintedAutomation {
                     }
                 }
             }
-            
+
         } catch (error) {
             console.error('❌ Error navigating to new listing:', error);
             throw error;
@@ -1073,12 +1419,9 @@ export class VintedAutomation {
         console.log('📱 INSTRUKCJE:');
         console.log('   1. Przejdź do otwartej przeglądarki Chrome');
         console.log('   2. Zaloguj się na Vinted (https://www.vinted.pl)');
-        console.log('   3. ❌ NIE używaj logowania przez Google/Facebook');
-        console.log('   4. ✅ Użyj "Zaloguj się przez email" + hasło');
-        console.log('   5. ✅ Lub utwórz nowe konto bezpośrednio na Vinted');
-        console.log('   6. ⚠️ Jeśli Google blokuje logowanie - to normalne!');
-        console.log('   7. 🔄 Kliknij "Cofnij" i wybierz logowanie przez email');
-        console.log('   8. Po zalogowaniu automatyzacja rozpocznie się automatycznie');
+        console.log('   3. ✅ Możesz użyć email/hasła lub Google/Facebook');
+        console.log('   4. ⚠️ Jeśli logowanie trwa dłużej, zakończ je ręcznie w tej samej karcie');
+        console.log('   5. Po zalogowaniu automatyzacja rozpocznie się automatycznie');
         console.log('');
         console.log(`⏰ Maksymalny czas oczekiwania: ${maxMinutes} minut`);
         console.log('');
@@ -1089,6 +1432,8 @@ export class VintedAutomation {
 
         while (Date.now() - startTime < maxWaitTime) {
             try {
+                await this.refreshActivePageReference();
+
                 if (!this.page) {
                     console.log('❌ Utracono połączenie ze stroną');
                     return false;
@@ -1098,53 +1443,40 @@ export class VintedAutomation {
                 const currentUrl = this.page.url();
                 const isOnVinted = currentUrl.includes('vinted.pl') || currentUrl.includes('vinted.com');
                 const isOnGoogleLogin = currentUrl.includes('accounts.google.com');
-                
+
                 if (isOnGoogleLogin) {
-                    const status = '⚠️ Google blokuje logowanie! Wróć do Vinted i użyj logowania przez email';
+                    const status = '🔐 Trwa logowanie przez Google - dokończ je w przeglądarce';
                     if (status !== lastStatus) {
                         console.log(status);
                         lastStatus = status;
                     }
-                    
-                    // Automatycznie wróć na Vinted
-                    try {
-                        await this.page.goto('https://www.vinted.pl/member/sign_in', { 
-                            waitUntil: 'networkidle2', 
-                            timeout: 10000 
-                        });
-                        console.log('🔄 Automatycznie przekierowano na stronę logowania Vinted');
-                    } catch {
-                        // Ignoruj błędy nawigacji
-                    }
-                    
                     await new Promise(resolve => setTimeout(resolve, 3000));
                     continue;
                 }
-                
+
                 if (!isOnVinted) {
                     const status = '📍 Przejdź na stronę vinted.pl w przeglądarce';
                     if (status !== lastStatus) {
                         console.log(status);
                         lastStatus = status;
                     }
-                    
-                    // Próbuj automatycznie przejść na Vinted
+
                     try {
-                        await this.page.goto('https://www.vinted.pl', { 
-                            waitUntil: 'networkidle2', 
-                            timeout: 10000 
+                        await this.page.goto('https://www.vinted.pl', {
+                            waitUntil: 'domcontentloaded',
+                            timeout: 10000
                         });
                     } catch {
-                        // Ignoruj błędy nawigacji
+                        // Ignoruj - użytkownik mógł być w trakcie przejścia między kartami
                     }
-                    
+
                     await new Promise(resolve => setTimeout(resolve, 3000));
                     continue;
                 }
 
                 // Sprawdź czy użytkownik jest zalogowany
                 const isLoggedIn = await this.checkIfLoggedIn();
-                
+
                 if (isLoggedIn) {
                     console.log('');
                     console.log('✅ ZALOGOWANO POMYŚLNIE!');
@@ -1182,84 +1514,84 @@ export class VintedAutomation {
     async processAllAdvertisements(userId?: string) {
         try {
             console.log('🚀 Starting to process all advertisements...');
-            
+
             // Najpierw sprawdź czy użytkownik jest zalogowany
             const isLoggedIn = await this.checkIfLoggedIn();
-            
+
             if (!isLoggedIn) {
                 console.log('⚠️ Użytkownik nie jest zalogowany');
-                
+
                 // Czekaj na zalogowanie użytkownika
                 const loginSuccess = await this.waitForLogin(5); // 5 minut
-                
+
                 if (!loginSuccess) {
                     throw new Error('Nie udało się zalogować w wyznaczonym czasie');
                 }
             } else {
                 console.log('✅ Użytkownik już jest zalogowany');
             }
-            
+
             // Kliknij przycisk "Sprzedaj"
             await this.clickSellButton();
-            
+
             // Poczekaj na załadowanie formularza
             await new Promise(resolve => setTimeout(resolve, 3000));
-            
+
             // Pobierz ogłoszenia z bazy danych - tylko nieopublikowane do Vinted
             console.log('📥 Fetching unpublished advertisements from database...');
             const advertisements = await fetchUnpublishedToVintedAdvertisements(userId);
-            
+
             if (advertisements.length === 0) {
                 console.log('❌ No unpublished advertisements found in database');
                 console.log('💡 Tip: Check if any advertisements have is_published_to_vinted = false');
                 return;
             }
-            
+
             console.log(`✅ Found ${advertisements.length} unpublished advertisements`);
-            
+
             // Przetwarzaj ogłoszenia jedno po drugim
             for (let i = 0; i < advertisements.length; i++) {
                 const ad = advertisements[i] as Advertisement;
-                
+
                 if (ad && !ad.is_published_to_vinted) {
                     console.log(`\n🔄 Processing advertisement ${i + 1}/${advertisements.length}: ${ad.marka} ${ad.rodzaj}`);
-                    
+
                     try {
                         await this.processAdvertisement(ad);
                         console.log(`✅ Advertisement ${i + 1} completed successfully!`);
-                        
+
                         // Jeśli to nie ostatnie ogłoszenie, przygotuj się do następnego
                         if (i < advertisements.length - 1) {
                             console.log('\n🔄 Preparing for next advertisement...');
                             console.log('📝 Navigating to create new listing...');
-                            
+
                             // Przejdź bezpośrednio na stronę dodawania nowego ogłoszenia
                             await this.navigateToNewListing();
-                            
+
                             // Poczekaj na załadowanie formularza
                             await new Promise(resolve => setTimeout(resolve, 3000));
                             console.log('✅ Ready for next advertisement');
                         }
-                        
+
                     } catch (error) {
                         console.error(`❌ Error processing advertisement ${i + 1}:`, error);
                         console.log('⏭️  Skipping to next advertisement...');
-                        
+
                         // Jeśli mamy więcej ogłoszeń, przygotuj się do następnego
                         if (i < advertisements.length - 1) {
                             console.log('🔄 Preparing for next advertisement after error...');
-                            
+
                             // Daj stronie więcej czasu na zresetowanie się po błędzie
                             await new Promise(resolve => setTimeout(resolve, 5000));
-                            
+
                             let navigationSuccess = false;
                             let navAttempts = 0;
                             const maxNavAttempts = 3;
-                            
+
                             while (!navigationSuccess && navAttempts < maxNavAttempts) {
                                 navAttempts++;
                                 console.log(`🎯 Navigation attempt ${navAttempts}/${maxNavAttempts}...`);
-                                
+
                                 try {
                                     await this.navigateToNewListing();
                                     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -1267,7 +1599,7 @@ export class VintedAutomation {
                                     console.log('✅ Navigation successful after error');
                                 } catch (navError) {
                                     console.error(`❌ Navigation attempt ${navAttempts} failed:`, navError instanceof Error ? navError.message : String(navError));
-                                    
+
                                     if (navAttempts < maxNavAttempts) {
                                         console.log(`⏳ Waiting 10 seconds before next attempt...`);
                                         await new Promise(resolve => setTimeout(resolve, 10000));
@@ -1284,21 +1616,21 @@ export class VintedAutomation {
                     console.log(`⏭️  Skipping completed advertisement: ${ad.marka} ${ad.rodzaj}`);
                 }
             }
-            
+
             console.log('\n🎉 All advertisements processed!');
             console.log('✅ Automation completed successfully.');
-            
+
         } catch (error) {
             console.error('❌ Error in processAllAdvertisements:', error);
-            
+
             const errorMessage = error instanceof Error ? error.message : String(error);
-            
+
             if (errorMessage.includes('TimeoutError') || errorMessage.includes('Waiting for selector')) {
                 console.log('\n💡 Rozwiązania problemów:');
                 console.log('1. Sprawdź czy jesteś zalogowany na Vinted');
                 console.log('2. Sprawdź czy strona się w pełni załadowała');
                 console.log('3. Vinted może zmienić interfejs - spróbuj ręcznie');
-                
+
                 await this.waitForUserInteraction('Możesz kontynuować ręcznie w przeglądarce', 120);
             }
         }
@@ -1306,17 +1638,17 @@ export class VintedAutomation {
 
     async clickSellButton() {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         console.log('Looking for Sprzedaj button...');
-        
+
         try {
             // Lista możliwych selektorów dla przycisku "Sprzedaj"
             const sellButtonSelectors = [
                 'a[href="/items/new"]'
             ];
-            
+
             let buttonFound = false;
-            
+
             // Próbuj każdy selektor
             for (const selector of sellButtonSelectors) {
                 try {
@@ -1329,7 +1661,7 @@ export class VintedAutomation {
                     // Nie loguj błędów dla poszczególnych selektorów
                 }
             }
-            
+
             // Jeśli żaden selektor nie zadziałał, spróbuj znaleźć przez tekst
             if (!buttonFound) {
                 console.log('Trying to find button by text content...');
@@ -1339,11 +1671,11 @@ export class VintedAutomation {
                         ...Array.from(document.querySelectorAll('a')),
                         ...Array.from(document.querySelectorAll('button'))
                     ];
-                    
+
                     for (const element of elements) {
                         const text = element.textContent?.toLowerCase() || '';
                         const href = element.getAttribute('href') || '';
-                        
+
                         if (text.includes('sprzedaj') || href.includes('/items/new')) {
                             (element as HTMLElement).click();
                             return true;
@@ -1351,12 +1683,12 @@ export class VintedAutomation {
                     }
                     return false;
                 });
-                
+
                 if (buttonFound) {
                     console.log('✅ Found and clicked Sprzedaj button by text');
                 }
             }
-            
+
             if (!buttonFound) {
                 // Wypisz dostępne elementy na stronie dla debugowania
                 console.log('🔍 Available buttons and links on page:');
@@ -1366,30 +1698,30 @@ export class VintedAutomation {
                         text: btn.textContent?.trim(),
                         classes: btn.className
                     }));
-                    
+
                     const links = Array.from(document.querySelectorAll('a')).map(link => ({
                         type: 'link',
                         text: link.textContent?.trim(),
                         href: link.getAttribute('href'),
                         classes: link.className
                     }));
-                    
+
                     return [...buttons, ...links].slice(0, 20); // Pokaż pierwsze 20 elementów
                 });
-                
+
                 console.log(JSON.stringify(availableElements, null, 2));
-                
+
                 throw new Error('Nie znaleziono przycisku Sprzedaj. Sprawdź czy jesteś zalogowany i na właściwej stronie.');
             }
-            
+
             // Czekaj na załadowanie strony dodawania przedmiotu
-            await this.page.waitForNavigation({ 
-                waitUntil: 'networkidle2', 
-                timeout: 15000 
+            await this.page.waitForNavigation({
+                waitUntil: 'networkidle2',
+                timeout: 15000
             }).catch(() => {
                 console.log('Navigation timeout - but continuing...');
             });
-            
+
         } catch (error) {
             console.error('Error clicking Sprzedaj button:', error);
             throw error;
@@ -1398,29 +1730,44 @@ export class VintedAutomation {
 
     async addPhotos(photoUrls: string[], rotations?: string[]) {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         console.log(`📸 Starting photo upload process for ${photoUrls.length} photos...`);
-        
+
         if (photoUrls.length === 0) {
             console.log('⚠️  No photos to upload');
             return;
         }
-        
+
         try {
+            const targetPhotoUrls = photoUrls.slice(0, 10);
+            const expectedPhotosCount = targetPhotoUrls.length;
+
+            const initialPhotosCount = await this.getUploadedPhotosCount();
+            if (initialPhotosCount > 0) {
+                console.log(`📊 Found ${initialPhotosCount} existing photos before cleanup`);
+            }
+
+            await this.clearExistingUploadedPhotos();
+
+            await new Promise(resolve => setTimeout(resolve, 900));
+            const baselinePhotosCount = await this.getUploadedPhotosCount();
+            if (baselinePhotosCount > 0) {
+                console.log(`ℹ️  Baseline photos after cleanup: ${baselinePhotosCount}`);
+            }
+
             // Pobierz zdjęcia z URL-ów i zapisz lokalnie z rotacją
             console.log('📥 Downloading photos from URLs...');
-            const localPhotoPaths = await this.downloadImages(photoUrls, rotations);
-            
-            if (localPhotoPaths.length === 0) {
-                console.log('❌ No photos were downloaded successfully');
-                return;
+            const localPhotoPaths = await this.downloadImages(targetPhotoUrls, rotations);
+
+            if (localPhotoPaths.length !== expectedPhotosCount) {
+                throw new Error(`Nie pobrano wszystkich zdjęć (${localPhotoPaths.length}/${expectedPhotosCount})`);
             }
-            
-            console.log(`✅ Downloaded ${localPhotoPaths.length} photos`);
-            
+
+            console.log(`✅ Downloaded ${localPhotoPaths.length}/${expectedPhotosCount} photos`);
+
             // Znajdź input file dla zdjęć
             console.log('🔍 Looking for photo upload input...');
-            
+
             // Spróbuj różne selektory dla input file
             const fileInputSelectors = [
                 'input[type="file"]',
@@ -1431,9 +1778,9 @@ export class VintedAutomation {
                 '.photo-upload input',
                 '.image-upload input'
             ];
-            
+
             let fileInput = null;
-            
+
             for (const selector of fileInputSelectors) {
                 try {
                     fileInput = await this.page.$(selector);
@@ -1445,11 +1792,11 @@ export class VintedAutomation {
                     // Kontynuuj z kolejnym selektorem
                 }
             }
-            
+
             // Jeśli nie ma input file, spróbuj kliknąć przycisk "Dodaj zdjęcia" żeby go odsłonić
             if (!fileInput) {
                 console.log('🔍 File input not found, trying to click "Dodaj zdjęcia" button...');
-                
+
                 // Spróbuj konkretnych selektorów dla przycisku
                 const buttonSelectors = [
                     '.media-select__input button',
@@ -1457,17 +1804,17 @@ export class VintedAutomation {
                     'button:has([data-testid="plus"])',
                     'button'
                 ];
-                
+
                 let buttonClicked = false;
-                
+
                 for (const selector of buttonSelectors) {
                     try {
                         if (selector === 'button') {
                             // Ostatni fallback - szukaj po tekście
                             buttonClicked = await this.page.evaluate(() => {
                                 const buttons = Array.from(document.querySelectorAll('button'));
-                                const addPhotosBtn = buttons.find(btn => 
-                                    btn.textContent?.includes('Dodaj zdjęcia') || 
+                                const addPhotosBtn = buttons.find(btn =>
+                                    btn.textContent?.includes('Dodaj zdjęcia') ||
                                     btn.textContent?.includes('Add photos')
                                 );
                                 if (addPhotosBtn) {
@@ -1489,16 +1836,16 @@ export class VintedAutomation {
                     } catch (error) {
                         continue;
                     }
-                    
+
                     if (buttonClicked) break;
                 }
-                
+
                 if (buttonClicked) {
                     console.log('✅ Clicked "Dodaj zdjęcia" button');
-                    
+
                     // Czekaj chwilę na pojawienie się input
                     await new Promise(resolve => setTimeout(resolve, 2000));
-                    
+
                     // Spróbuj znaleźć input ponownie
                     for (const selector of fileInputSelectors) {
                         try {
@@ -1515,11 +1862,11 @@ export class VintedAutomation {
                     console.log('❌ Could not find or click "Dodaj zdjęcia" button');
                 }
             }
-            
+
             if (!fileInput) {
                 console.log('❌ Could not find file input element');
                 console.log('🔧 Available inputs on page:');
-                
+
                 const availableInputs = await this.page.evaluate(() => {
                     const inputs = Array.from(document.querySelectorAll('input'));
                     return inputs.map(input => ({
@@ -1530,26 +1877,34 @@ export class VintedAutomation {
                         id: input.id
                     })).slice(0, 10);
                 });
-                
+
                 console.log(JSON.stringify(availableInputs, null, 2));
-                
+
                 // Spróbuj alternatywnego podejścia - drag & drop
                 console.log('🔄 Trying alternative approach with drag & drop...');
                 await this.uploadPhotosByDragDrop(localPhotoPaths);
+
+                const countAfterDragDrop = await this.getUploadedPhotosCount();
+                if (countAfterDragDrop < expectedPhotosCount) {
+                    throw new Error(`Po drag&drop wykryto za mało zdjęć (${countAfterDragDrop}/${expectedPhotosCount})`);
+                }
+
+                console.log(`✅ Drag&drop uploaded ${countAfterDragDrop}/${expectedPhotosCount} photos`);
                 return;
             }
-            
+
             // Upload zdjęć przez input file
             console.log('📤 Uploading photos...');
-            
+
             // Upload maksymalnie 10 zdjęć (limit Vinted)
             const photosToUpload = localPhotoPaths.slice(0, 10);
-            
+
             // Użyj właściwej metody Puppeteer
-            const inputElement = await this.page.$('input[type="file"]');
-            if (inputElement) {
-                await inputElement.uploadFile(...photosToUpload);
-            } else {
+            try {
+                await (fileInput as any).uploadFile(...photosToUpload);
+            } catch (primaryUploadError) {
+                console.log('⚠️ Primary file input upload failed, retrying with direct input[type="file"]...');
+
                 // Alternatywne podejście - ustaw pliki bezpośrednio
                 await this.page.evaluate(() => {
                     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -1559,27 +1914,39 @@ export class VintedAutomation {
                         input.style.opacity = '1';
                     }
                 });
-                
-                // Spróbuj ponownie
+
                 const retryInput = await this.page.$('input[type="file"]');
-                if (retryInput) {
-                    await retryInput.uploadFile(...photosToUpload);
+                if (!retryInput) {
+                    throw primaryUploadError;
+                }
+                await (retryInput as any).uploadFile(...photosToUpload);
+            }
+
+            console.log('✅ Photos uploaded successfully!');
+
+            // Czekaj na przetworzenie zdjęć i wymagaj kompletu
+            let uploadedPhotosCount = 0;
+            for (let check = 1; check <= 8; check++) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                const domUploadedPhotosCount = await this.getUploadedPhotosCount();
+                const inputFilesCount = await (fileInput as any)
+                    .evaluate((el: HTMLInputElement) => el.files?.length || 0)
+                    .catch(() => 0);
+
+                const newlyAddedDomPhotos = Math.max(0, domUploadedPhotosCount - baselinePhotosCount);
+                uploadedPhotosCount = Math.max(newlyAddedDomPhotos, inputFilesCount);
+                console.log(`📊 Detected ${uploadedPhotosCount}/${expectedPhotosCount} uploaded photos on page (domNew: ${newlyAddedDomPhotos}, domTotal: ${domUploadedPhotosCount}, inputFiles: ${inputFilesCount})`);
+                if (uploadedPhotosCount >= expectedPhotosCount) {
+                    break;
                 }
             }
-            
-            console.log('✅ Photos uploaded successfully!');
-            
-            // Czekaj na przetworzenie zdjęć
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            
-            // Opcjonalnie: sprawdź czy zdjęcia się pojawiły
-            const uploadedPhotosCount = await this.page.evaluate(() => {
-                const photoElements = document.querySelectorAll('img[src*="blob:"], .photo-preview, .image-preview');
-                return photoElements.length;
-            });
-            
-            console.log(`📊 Detected ${uploadedPhotosCount} uploaded photos on page`);
-            
+
+            if (uploadedPhotosCount < expectedPhotosCount) {
+                throw new Error(`Nie wszystkie zdjęcia zostały załadowane (${uploadedPhotosCount}/${expectedPhotosCount})`);
+            }
+
+            console.log(`✅ Photo upload complete (${uploadedPhotosCount}/${expectedPhotosCount})`);
+
         } catch (error) {
             console.error('❌ Error adding photos:', error);
             throw error;
@@ -1588,9 +1955,9 @@ export class VintedAutomation {
 
     async uploadPhotosByDragDrop(photoPaths: string[]) {
         if (!this.page) return;
-        
+
         console.log('🎯 Attempting drag & drop upload...');
-        
+
         try {
             // Znajdź element do przeciągnięcia zdjęć
             const dropZoneSelectors = [
@@ -1601,9 +1968,9 @@ export class VintedAutomation {
                 '[data-testid*="image"]',
                 '.upload-area'
             ];
-            
+
             let dropZone = null;
-            
+
             for (const selector of dropZoneSelectors) {
                 try {
                     dropZone = await this.page.$(selector);
@@ -1615,23 +1982,23 @@ export class VintedAutomation {
                     // Kontynuuj
                 }
             }
-            
+
             if (!dropZone) {
                 console.log('❌ No drop zone found for drag & drop');
                 return;
             }
-            
+
             // Symuluj drag & drop dla każdego zdjęcia
             for (const photoPath of photoPaths) {
                 console.log(`🎯 Dropping photo: ${path.basename(photoPath)}`);
-                
+
                 const dataTransfer = await this.page.evaluateHandle(() => new DataTransfer());
-                
+
                 // To jest skomplikowane w Puppeteer - może być potrzebne inne podejście
                 console.log('⚠️  Drag & drop simulation is complex in Puppeteer');
                 console.log('💡 Manual intervention may be required');
             }
-            
+
         } catch (error) {
             console.error('❌ Error in drag & drop upload:', error);
         }
@@ -1639,22 +2006,22 @@ export class VintedAutomation {
 
     async fillTitle(title: string) {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         console.log('Filling title...');
-        
+
         try {
             // Czekaj na pole tytułu
             await this.page.waitForSelector('input#title[data-testid="title--input"]', { timeout: 10000 });
-            
+
             // Wyczyść pole i wpisz tytuł
             await this.page.click('input#title[data-testid="title--input"]');
             await this.page.keyboard.down('Control');
             await this.page.keyboard.press('a');
             await this.page.keyboard.up('Control');
             await this.page.type('input#title[data-testid="title--input"]', title);
-            
+
             console.log('Title filled:', title);
-            
+
         } catch (error) {
             console.error('Error filling title:', error);
             throw error;
@@ -1663,53 +2030,54 @@ export class VintedAutomation {
 
     async fillDescription(description: string) {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         console.log('Filling description...');
-        
+
         try {
             // Czekaj na pole opisu
             await this.page.waitForSelector('textarea#description[data-testid="description--input"]', { timeout: 10000 });
-            
+
             // Wyczyść pole i wpisz opis
             await this.page.click('textarea#description[data-testid="description--input"]');
             await this.page.keyboard.down('Control');
             await this.page.keyboard.press('a');
             await this.page.keyboard.up('Control');
             await this.page.type('textarea#description[data-testid="description--input"]', description);
-            
+
             console.log('Description filled');
-            
+
         } catch (error) {
             console.error('Error filling description:', error);
             throw error;
         }
     }
 
-    async selectCategory(advertisement: Advertisement) {
+    async selectCategory(advertisement: Advertisement, attempt: number = 1): Promise<void> {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
+            await this.refreshActivePageReference();
             console.log('🏷️ Selecting category based on rodzaj:', advertisement.rodzaj);
-            
+
             // Kliknij dropdown kategorii
             console.log('📁 Opening category dropdown...');
             await this.page.waitForSelector('input[data-testid="catalog-select-dropdown-input"]', { timeout: 10000 });
             await this.page.click('input[data-testid="catalog-select-dropdown-input"]');
-            
+
             // Poczekaj na załadowanie kategorii
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wybierz "Mężczyźni"
             console.log('👨 Selecting "Mężczyźni"...');
             await this.page.waitForSelector('#catalog-5', { timeout: 5000 });
             await this.page.click('#catalog-5');
-            
+
             // Poczekaj na załadowanie podkategorii
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Określ kategorię główną na podstawie rodzaju
             const categoryInfo = this.determineCategoryFromRodzaj(advertisement.rodzaj || '');
-            
+
             console.log('🔍 Category mapping result:', {
                 rodzaj: advertisement.rodzaj,
                 mainCategory: categoryInfo.mainCategory,
@@ -1721,45 +2089,45 @@ export class VintedAutomation {
                 finalCategory: categoryInfo.finalCategory,
                 finalCategoryId: categoryInfo.finalCategoryId
             });
-            
+
             // Wybierz kategorię główną (Ubrania/Obuwie/Akcesoria)
             console.log(`📂 Selecting main category: ${categoryInfo.mainCategory}...`);
             await this.page.waitForSelector(`#catalog-${categoryInfo.mainCategoryId}`, { timeout: 5000 });
             await this.page.click(`#catalog-${categoryInfo.mainCategoryId}`);
-            
+
             // Poczekaj na załadowanie kolejnych podkategorii
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wybierz subkategorię jeśli potrzebna
             if (categoryInfo.subCategoryId) {
                 console.log(`📂 Selecting subcategory: ${categoryInfo.subCategory}...`);
                 await this.page.waitForSelector(`#catalog-${categoryInfo.subCategoryId}`, { timeout: 5000 });
                 await this.page.click(`#catalog-${categoryInfo.subCategoryId}`);
-                
+
                 // Poczekaj na załadowanie kolejnych podkategorii
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
-            
+
             // Wybierz kategorię pośrednią jeśli potrzebna (np. "Koszule" przed "Koszule w kratkę")
             if (categoryInfo.intermediateCategoryId) {
                 console.log(`📂 Selecting intermediate category: ${categoryInfo.intermediateCategory}...`);
                 await this.page.waitForSelector(`#catalog-${categoryInfo.intermediateCategoryId}`, { timeout: 5000 });
                 await this.page.click(`#catalog-${categoryInfo.intermediateCategoryId}`);
-                
+
                 // Poczekaj na załadowanie kolejnych podkategorii
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
-            
+
             // Wybierz finalną kategorię
             if (categoryInfo.finalCategoryId) {
                 console.log(`📂 Selecting final category: ${categoryInfo.finalCategory}...`);
                 await this.page.waitForSelector(`#catalog-${categoryInfo.finalCategoryId}`, { timeout: 5000 });
                 await this.page.click(`#catalog-${categoryInfo.finalCategoryId}`);
-                
+
                 // Poczekaj na załadowanie
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
-            
+
             // Sprawdź czy jest radio button do zaznaczenia
             if (categoryInfo.finalCategoryId) {
                 const radioSelector = `#${categoryInfo.finalCategoryId}-catalog-radio`;
@@ -1771,44 +2139,50 @@ export class VintedAutomation {
                     console.log('ℹ️  No radio button found, category selection might be complete');
                 }
             }
-            
+
             // Poczekaj na zamknięcie dropdown
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             console.log('✅ Category selected successfully');
-            
-            // Sprawdź i zaznacz checkbox Unisex jeśli istnieje (dla akcesoriów)
-            await this.checkAndSelectUnisexIfAvailable();
-            
+
         } catch (error) {
             console.error('❌ Error selecting category:', error);
-            console.log('💡 Możesz wybrać kategorię ręcznie w przeglądarce');
+
+            if (this.isTransientFrameError(error) && attempt < 3) {
+                console.log('🔄 Detached frame during category selection, refreshing page reference and retrying...');
+                await this.refreshActivePageReference();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return this.selectCategory(advertisement, attempt + 1);
+            }
+
+            throw error;
         }
     }
 
-    async checkAndSelectUnisexIfAvailable() {
+    async checkAndSelectUnisexIfAvailable(attempt: number = 1): Promise<void> {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
+            await this.refreshActivePageReference();
             console.log('🔄 Checking for Unisex checkbox...');
-            
+
             // Sprawdź czy checkbox unisex istnieje
             const unisexCheckbox = await this.page.$('input[id="unisex"]');
-            
+
             if (unisexCheckbox) {
                 // Sprawdź czy checkbox jest już zaznaczony
                 const isChecked = await this.page.evaluate(() => {
                     const checkbox = document.querySelector('input[id="unisex"]') as HTMLInputElement;
                     return checkbox ? checkbox.checked : false;
                 });
-                
+
                 if (!isChecked) {
                     console.log('☑️  Found Unisex checkbox, selecting it...');
                     await unisexCheckbox.click();
-                    
+
                     // Poczekaj chwilę żeby się załadowało
                     await new Promise(resolve => setTimeout(resolve, 500));
-                    
+
                     console.log('✅ Unisex checkbox selected');
                 } else {
                     console.log('ℹ️  Unisex checkbox already selected');
@@ -1816,8 +2190,15 @@ export class VintedAutomation {
             } else {
                 console.log('ℹ️  No Unisex checkbox found (normal for clothing items)');
             }
-            
+
         } catch (error) {
+            if (this.isTransientFrameError(error) && attempt < 3) {
+                console.log('🔄 Detached frame during Unisex check, refreshing page reference and retrying...');
+                await this.refreshActivePageReference();
+                await new Promise(resolve => setTimeout(resolve, 700));
+                return this.checkAndSelectUnisexIfAvailable(attempt + 1);
+            }
+
             console.error('⚠️  Error checking Unisex checkbox:', error);
             // Nie przerywamy procesu - to nie jest krytyczny błąd
         }
@@ -2096,13 +2477,13 @@ export class VintedAutomation {
 
         // Fallback - sprawdź podobieństwa dla starych danych
         const type = rodzaj.toLowerCase();
-        
+
         if (type.includes('t-shirt') || type.includes('tshirt')) {
             if (type.includes('nadruk') || type.includes('print')) {
                 return categoryMappings['T-shirty z nadrukiem'];
             }
         }
-        
+
         if (type.includes('koszul') && !type.includes('podkoszul')) {
             if (type.includes('nadruk') || type.includes('print')) {
                 return categoryMappings['Koszulki z nadrukiem'];
@@ -2112,7 +2493,7 @@ export class VintedAutomation {
                 return categoryMappings['Koszule dżinsowe'];
             }
         }
-        
+
         // Fallback dla kurtek
         if (type.includes('kurtk') || type.includes('jacket') || type.includes('płaszcz') || type.includes('coat') || type.includes('bomber')) {
             return categoryMappings['kurtka'];
@@ -2183,36 +2564,40 @@ export class VintedAutomation {
         };
     }
 
-    async selectBrand(advertisement: Advertisement) {
+    async selectBrand(advertisement: Advertisement, attempt: number = 1): Promise<void> {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
+            await this.refreshActivePageReference();
             console.log('🏷️ Selecting brand:', advertisement.marka);
-            
+
             // Kliknij dropdown marki - spróbuj różne selektory
             console.log('📁 Opening brand dropdown...');
-            
+
             const brandDropdownSelectors = [
-                'input[data-testid="brand-select-dropdown-input"]'
+                'input[data-testid="brand-select-dropdown-input"]',
+                'input[id="brand"]',
+                'input[name*="brand"]',
+                '[data-testid*="brand"] input'
             ];
-            
+
             let dropdownClicked = false;
-            
+
             for (const selector of brandDropdownSelectors) {
                 try {
                     console.log(`🎯 Trying brand dropdown selector: ${selector}`);
                     await this.page.waitForSelector(selector, { timeout: 5000 });
-                    
+
                     // Sprawdź czy element jest widoczny, klikalny i czy nie jest disabled
                     const elementState = await this.page.evaluate((sel) => {
                         const element = document.querySelector(sel) as HTMLInputElement;
                         if (!element) return { exists: false };
-                        
+
                         const rect = element.getBoundingClientRect();
                         const isVisible = rect.width > 0 && rect.height > 0;
                         const isDisabled = element.disabled || element.hasAttribute('disabled');
                         const isReadonly = element.readOnly || element.hasAttribute('readonly');
-                        
+
                         return {
                             exists: true,
                             isVisible,
@@ -2221,9 +2606,9 @@ export class VintedAutomation {
                             canClick: isVisible && !isDisabled
                         };
                     }, selector);
-                    
+
                     console.log(`📊 Element state for ${selector}:`, elementState);
-                    
+
                     if (elementState.canClick) {
                         await this.page.click(selector);
                         console.log(`✅ Successfully clicked brand dropdown with selector: ${selector}`);
@@ -2237,25 +2622,29 @@ export class VintedAutomation {
                     console.log(`❌ Selector ${selector} failed: ${errorMsg}`);
                 }
             }
-            
+
             if (!dropdownClicked) {
                 console.log('❌ Could not click brand dropdown with any selector');
                 console.log('💡 Manual intervention needed - please click the brand dropdown manually');
                 // Czekaj 10 sekund na ręczne kliknięcie
                 await new Promise(resolve => setTimeout(resolve, 10000));
             }
-            
+
             // Poczekaj dłużej na załadowanie modala
             await new Promise(resolve => setTimeout(resolve, 2000));
-            
+
             // Sprawdź różne możliwe selektory pola wyszukiwania
             console.log(`🔍 Looking for brand input field...`);
             let inputField = null;
-            
+
             const inputSelectors = [
+                '#brand-search-input',
+                '[data-testid="brand-search--input"]',
+                'input[name="brand-search-input"]',
+                'input[placeholder="Wyszukaj markę"]',
                 'input[placeholder*="markę"]'
             ];
-            
+
             for (const selector of inputSelectors) {
                 try {
                     inputField = await this.page.waitForSelector(selector, { timeout: 2000 });
@@ -2267,51 +2656,85 @@ export class VintedAutomation {
                     // Nie loguj błędów dla poszczególnych selektorów
                 }
             }
-            
+
             if (!inputField) {
                 console.log('⚠️  Could not find brand input field, trying to proceed without typing...');
                 // Spróbuj znaleźć markę bezpośrednio na liście
                 await this.selectBrandFromList(advertisement.marka || '');
                 return;
             }
-            
+
             // Wpisz markę w pole wyszukiwania
             console.log(`⌨️  Typing brand name: ${advertisement.marka}...`);
             await inputField.click();
-            
+
             // Wyczyść pole i wpisz markę
             await this.page.keyboard.down('Control');
             await this.page.keyboard.press('a');
             await this.page.keyboard.up('Control');
             await this.page.keyboard.type(advertisement.marka || '');
-            
+
             // Poczekaj na wyniki wyszukiwania
             await new Promise(resolve => setTimeout(resolve, 2000));
-            
+
             // Wybierz pierwszy wynik
             await this.selectBrandFromList(advertisement.marka || '');
-            
+
+            // Twarda walidacja - marka musi być ustawiona po wyborze
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const selectedBrandValue = await this.page.evaluate(() => {
+                const selectors = [
+                    'input[data-testid="brand-select-dropdown-input"]',
+                    'input[id="brand"]',
+                    'input[name*="brand"]',
+                    '[data-testid*="brand"] input'
+                ];
+
+                for (const selector of selectors) {
+                    const input = document.querySelector(selector) as HTMLInputElement | null;
+                    const value = (input?.value || '').trim();
+                    if (value) return value;
+                }
+
+                const selectedCell = document.querySelector('[data-testid*="brand"] .web_ui__Cell__title, [id^="brand-"] .web_ui__Cell__title');
+                return (selectedCell?.textContent || '').trim();
+            });
+
+            if (!selectedBrandValue) {
+                throw new Error('Marka nie została wybrana poprawnie');
+            }
+
+            console.log(`✅ Brand confirmed: "${selectedBrandValue}"`);
+
             // Dodatkowo sprawdź czy nie pojawił się modal autentyczności
             await this.closeAuthenticityModalIfPresent();
-            
+
         } catch (error) {
             console.error('❌ Error selecting brand:', error);
-            console.log('💡 Możesz wybrać markę ręcznie w przeglądarce');
+
+            if (this.isTransientFrameError(error) && attempt < 3) {
+                console.log('🔄 Detached frame during brand selection, refreshing page reference and retrying...');
+                await this.refreshActivePageReference();
+                await new Promise(resolve => setTimeout(resolve, 1200));
+                return this.selectBrand(advertisement, attempt + 1);
+            }
+
+            throw error;
         }
     }
 
     async selectBrandFromList(brandName: string) {
         if (!this.page) return;
-        
+
         try {
             console.log('📋 Selecting brand from list...');
             console.log(`🔍 Looking for brand: "${brandName}"`);
-            
+
             // Poczekaj na załadowanie listy marek
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             let brandSelected = false;
-            
+
             // 1. Spróbuj znaleźć po dokładnej nazwie marki w aria-label
             try {
                 const exactBrandElement = await this.page.$(`[aria-label="${brandName}"]`);
@@ -2323,17 +2746,17 @@ export class VintedAutomation {
             } catch (error) {
                 console.log('❌ Exact brand match failed');
             }
-            
+
             // 2. Jeśli nie znaleziono, spróbuj po ID marki (brand-*)
             if (!brandSelected) {
                 try {
                     const brandElements = await this.page.$$('.web_ui__Cell__cell[id^="brand-"]');
                     console.log(`🔍 Found ${brandElements.length} brand elements with brand- prefix`);
-                    
+
                     for (const element of brandElements) {
                         const ariaLabel = await element.evaluate(el => el.getAttribute('aria-label'));
                         console.log(`📋 Checking brand element: "${ariaLabel}"`);
-                        
+
                         if (ariaLabel && ariaLabel.toLowerCase().includes(brandName.toLowerCase())) {
                             console.log(`✅ Found matching brand: ${ariaLabel}`);
                             await element.click();
@@ -2345,36 +2768,36 @@ export class VintedAutomation {
                     console.log('❌ Brand ID search failed');
                 }
             }
-            
+
             // 3. Sprawdź czy jest opcja "Użyj [marka] jako marki" dla niestandardowych marek
             if (!brandSelected) {
                 try {
                     console.log('🔍 Looking for custom brand option...');
-                    
+
                     // Metoda A: Szukaj elementu z id="custom-select-brand"
                     const customBrandElement = await this.page.$('#custom-select-brand');
                     if (customBrandElement) {
-                        const titleText = await customBrandElement.$eval('.web_ui__Cell__title', 
+                        const titleText = await customBrandElement.$eval('.web_ui__Cell__title',
                             el => el.textContent?.trim() || '').catch(() => '');
-                        
+
                         console.log(`📋 Found custom brand option: "${titleText}"`);
-                        
+
                         // Sprawdź czy tekst zawiera nazwę marki
-                        if (titleText.toLowerCase().includes(brandName.toLowerCase()) || 
+                        if (titleText.toLowerCase().includes(brandName.toLowerCase()) ||
                             titleText.includes('Użyj') || titleText.includes('jako marki')) {
                             console.log(`✅ Clicking custom brand option: ${titleText}`);
                             await customBrandElement.click();
                             brandSelected = true;
                         }
                     }
-                    
+
                     // Metoda B: Szukaj przez tekst "Użyj ... jako marki"
                     if (!brandSelected) {
                         const customBrandFound = await this.page.evaluate((brand) => {
                             const elements = document.querySelectorAll('*');
                             for (const element of elements) {
                                 const text = element.textContent?.trim() || '';
-                                if ((text.includes('Użyj') && text.includes('jako marki')) || 
+                                if ((text.includes('Użyj') && text.includes('jako marki')) ||
                                     (text.includes(brand) && text.includes('jako marki'))) {
                                     // Znajdź kliknięty element (może to być rodzic)
                                     let clickableElement: Element | null = element;
@@ -2382,7 +2805,7 @@ export class VintedAutomation {
                                         clickableElement = clickableElement.parentElement;
                                         if (!clickableElement) break;
                                     }
-                                    
+
                                     if (clickableElement) {
                                         (clickableElement as HTMLElement).click();
                                         return true;
@@ -2394,7 +2817,7 @@ export class VintedAutomation {
                             }
                             return false;
                         }, brandName);
-                        
+
                         if (customBrandFound) {
                             console.log(`✅ Found and clicked custom brand option via text search`);
                             brandSelected = true;
@@ -2404,7 +2827,7 @@ export class VintedAutomation {
                     console.log('❌ Custom brand search failed');
                 }
             }
-            
+
             // 4. Fallback - kliknij pierwszy element z brand- ID (jeśli inne metody zawiodły)
             if (!brandSelected) {
                 try {
@@ -2418,18 +2841,18 @@ export class VintedAutomation {
                     console.log('❌ Fallback brand selection failed');
                 }
             }
-            
+
             if (brandSelected) {
                 // Poczekaj chwilę i kliknij przycisk zapisz
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                
+
                 // Sprawdź czy pojawił się modal autentyczności i zamknij go
                 await this.closeAuthenticityModalIfPresent();
-                
+
                 // Poczekaj na zamknięcie dropdown
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
-            
+
         } catch (error) {
             console.error('❌ Error selecting brand from list:', error);
         }
@@ -2437,75 +2860,76 @@ export class VintedAutomation {
 
     async closeAuthenticityModalIfPresent() {
         if (!this.page) return;
-        
+
         try {
             console.log('🔍 Checking for authenticity modal...');
-            
+
             // Sprawdź czy modal autentyczności jest widoczny
             const modalSelector = 'button[data-testid="authenticity-modal--close-button"]';
             const modal = await this.page.$(modalSelector);
-            
+
             if (modal) {
                 console.log('📋 Authenticity modal detected, closing...');
                 await this.page.click(modalSelector);
                 console.log('✅ Authenticity modal closed');
-                
+
                 // Poczekaj na zamknięcie modala
                 await new Promise(resolve => setTimeout(resolve, 1000));
             } else {
                 console.log('ℹ️ No authenticity modal found');
             }
-            
+
         } catch (error) {
             console.log('⚠️ Error checking/closing authenticity modal:', error);
             // Nie rzucamy błędu, bo to nie jest krytyczne
         }
     }
 
+    private isAccessoryNoSizeCategory(rodzaj: string): boolean {
+        const categoriesWithoutSize = [
+            'portfele', 'portfel', 'wallet',
+            'poszetki', 'poszetka', 'pocket square',
+            'krawaty i muszki', 'krawat', 'muszka', 'tie', 'bow tie',
+            'okulary', 'sunglasses',
+            'chusty', 'chustki', 'szal', 'scarf',
+            'czapki', 'czapka', 'beanie', 'cap', 'hat'
+        ];
+
+        const rodzajLower = (rodzaj || '').toLowerCase();
+        return categoriesWithoutSize.some(category => rodzajLower.includes(category.toLowerCase()));
+    }
+
     async selectSize(advertisement: Advertisement) {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
             console.log('📏 Selecting size:', advertisement.rozmiar);
-            
-            // Lista kategorii, które nie mają rozmiarów
-            const categoriesWithoutSize = [
-                'portfele', 'portfel', 'wallet',
-                'poszetki', 'poszetka', 'pocket square',
-                'krawaty i muszki', 'krawat', 'muszka', 'tie', 'bow tie',
-                'okulary', 'sunglasses',
-                'chusty', 'chustki', 'szal', 'scarf'
-            ];
-            
-            // Sprawdź czy to kategoria bez rozmiarów
-            const rodzajLower = (advertisement.rodzaj || '').toLowerCase();
-            const hasNoSize = categoriesWithoutSize.some(category => 
-                rodzajLower.includes(category.toLowerCase())
-            );
-            
-            if (hasNoSize) {
-                console.log(`⚠️  Category "${advertisement.rodzaj}" typically has no size options, skipping size selection`);
-                return;
-            }
-            
+
+            const hasNoSize = this.isAccessoryNoSizeCategory(advertisement.rodzaj || '');
+
             // Sprawdź czy pole rozmiaru w ogóle istnieje na stronie
             const sizeFieldExists = await this.page.$('input[data-testid="size-select-dropdown-input"]');
             if (!sizeFieldExists) {
+                if (hasNoSize) {
+                    console.log(`ℹ️  Category "${advertisement.rodzaj}" has no visible size field - skipping size selection`);
+                    return;
+                }
+
                 console.log('⚠️  Size dropdown not found on page, skipping size selection');
                 return;
             }
-            
+
             // Kliknij dropdown rozmiaru
             console.log('📁 Opening size dropdown...');
             await this.page.waitForSelector('input[data-testid="size-select-dropdown-input"]', { timeout: 10000 });
             await this.page.click('input[data-testid="size-select-dropdown-input"]');
-            
+
             // Poczekaj na załadowanie listy rozmiarów
             await new Promise(resolve => setTimeout(resolve, 1500));
-            
+
             // Debug: sprawdź jakie elementy rozmiaru są dostępne
             try {
-                const allSizeElements = await this.page.$$eval('*[id*="size"]', 
+                const allSizeElements = await this.page.$$eval('*[id*="size"]',
                     elements => elements.map(el => ({
                         id: el.id,
                         tagName: el.tagName,
@@ -2517,9 +2941,16 @@ export class VintedAutomation {
             } catch (e) {
                 console.log('Size debug failed, continuing...');
             }
-            
+
             // Znajdź i kliknij odpowiedni rozmiar
-            const targetSize = advertisement.rozmiar?.trim() || '';
+            let targetSize = advertisement.rozmiar?.trim() || '';
+
+            // Dla kategorii akcesoriów wymuś Uniwersalny, jeśli pole rozmiaru istnieje
+            if (hasNoSize && targetSize.toLowerCase() !== 'uniwersalny') {
+                console.log(`ℹ️  For accessory category "${advertisement.rodzaj}" forcing size to "Uniwersalny"`);
+                targetSize = 'Uniwersalny';
+            }
+
             console.log(`🔍 Looking for size: "${targetSize}"`);
 
             if (!targetSize) {
@@ -2530,7 +2961,7 @@ export class VintedAutomation {
             // Użyj nowego mapowania rozmiarów
             const availableSizes = getSizesForCategory(advertisement.rodzaj || '');
             const normalizedTargetSize = normalizeSizeForCategory(targetSize, advertisement.rodzaj || '');
-            
+
             console.log(`🎯 Available sizes for "${advertisement.rodzaj}":`, availableSizes);
             console.log(`🎯 Normalized target size: "${normalizedTargetSize}"`);
 
@@ -2552,7 +2983,7 @@ export class VintedAutomation {
                 targetSize.replace(/\./g, ','),
                 targetSize.replace(/,/g, '.'),
                 // Tylko dokładne dopasowania z dostępnych rozmiarów
-                ...availableSizes.filter(size => 
+                ...availableSizes.filter(size =>
                     size.toLowerCase() === targetSize.toLowerCase() ||
                     size.toLowerCase() === normalizedTargetSize.toLowerCase()
                 )
@@ -2561,18 +2992,18 @@ export class VintedAutomation {
             // Usuń duplikaty
             const uniqueSizeVariants = [...new Set(allSizeVariants)];
             console.log(`🔍 Will try size variants:`, uniqueSizeVariants);
-            
+
             // Spróbuj znaleźć rozmiar na różne sposoby
             let sizeSelected = false;
-            
+
             // 1. Spróbuj znaleźć po dokładnym tekście (wszystkie warianty)
             try {
                 for (const variant of uniqueSizeVariants) {
                     const exactMatch = await this.page.waitForSelector(
-                        `div[data-testid*="size-"] .web_ui__Cell__title:text("${variant}")`, 
+                        `div[data-testid*="size-"] .web_ui__Cell__title:text("${variant}")`,
                         { timeout: 1000 }
                     ).catch(() => null);
-                    
+
                     if (exactMatch) {
                         const parentCell = await exactMatch.evaluateHandle(el => el.closest('.web_ui__Cell__cell'));
                         if (parentCell && 'click' in parentCell) {
@@ -2586,24 +3017,24 @@ export class VintedAutomation {
             } catch (error) {
                 console.log('❌ Exact text match failed, trying alternative approach...');
             }
-            
+
             // 2. Jeśli nie znaleziono, spróbuj przeszukać wszystkie elementy
             if (!sizeSelected) {
                 try {
                     const sizeElements = await this.page.$$('li .web_ui__Cell__cell[id^="size-"]');
                     console.log(`🔍 Found ${sizeElements.length} size elements (method 1)`);
-                    
+
                     for (const element of sizeElements) {
                         const sizeText = await element.$eval('.web_ui__Cell__title', el => el.textContent?.trim() || '');
                         console.log(`📋 Checking size: "${sizeText}"`);
-                        
+
                         // Porównaj z wszystkimi wariantami rozmiaru
-                        const sizeMatch = uniqueSizeVariants.some((variant: string) => 
-                            sizeText === variant || 
+                        const sizeMatch = uniqueSizeVariants.some((variant: string) =>
+                            sizeText === variant ||
                             sizeText.replace(/\./g, ',') === variant ||
                             sizeText.replace(/,/g, '.') === variant
                         );
-                        
+
                         if (sizeMatch) {
                             await element.click();
                             console.log(`✅ Selected size: ${sizeText} (matched with target: ${targetSize})`);
@@ -2615,25 +3046,25 @@ export class VintedAutomation {
                     console.log('❌ Method 1 failed');
                 }
             }
-            
+
             // 3. Metoda 2: Prostszy selektor
             if (!sizeSelected) {
                 try {
                     const sizeElements2 = await this.page.$$('[id^="size-"]');
                     console.log(`🔍 Found ${sizeElements2.length} size elements (method 2)`);
-                    
+
                     for (const element of sizeElements2) {
                         try {
                             const sizeText = await element.evaluate(el => el.textContent?.trim() || '');
                             console.log(`📋 Checking size (method 2): "${sizeText}"`);
-                            
+
                             // Porównaj z wszystkimi wariantami rozmiaru
-                            const sizeMatch = uniqueSizeVariants.some((variant: string) => 
-                                sizeText === variant || 
+                            const sizeMatch = uniqueSizeVariants.some((variant: string) =>
+                                sizeText === variant ||
                                 sizeText.replace(/\./g, ',') === variant ||
                                 sizeText.replace(/,/g, '.') === variant
                             );
-                            
+
                             if (sizeMatch) {
                                 await element.click();
                                 console.log(`✅ Selected size: ${sizeText} (method 2, matched with target: ${targetSize})`);
@@ -2648,7 +3079,7 @@ export class VintedAutomation {
                     console.log('❌ Method 2 failed');
                 }
             }
-            
+
             // 4. Metoda 3: Wyszukiwanie przez evaluate i textContent
             if (!sizeSelected) {
                 try {
@@ -2657,7 +3088,7 @@ export class VintedAutomation {
                         const found = await this.page.evaluate((targetSize) => {
                             const elements = Array.from(document.querySelectorAll('*'));
                             for (const element of elements) {
-                                if (element.textContent?.trim() === targetSize && 
+                                if (element.textContent?.trim() === targetSize &&
                                     element.id?.includes('size')) {
                                     (element as HTMLElement).click();
                                     return true;
@@ -2665,7 +3096,7 @@ export class VintedAutomation {
                             }
                             return false;
                         }, variant);
-                        
+
                         if (found) {
                             console.log(`✅ Selected size: ${variant} (method 3)`);
                             sizeSelected = true;
@@ -2676,7 +3107,7 @@ export class VintedAutomation {
                     console.log('❌ Method 3 failed');
                 }
             }
-            
+
             // 3. Jeśli nadal nie znaleziono, spróbuj radio button
             if (!sizeSelected) {
                 try {
@@ -2684,22 +3115,22 @@ export class VintedAutomation {
                     const radioSelector = `input[type="radio"][aria-labelledby*="size-"]`;
                     const radioButtons = await this.page.$$(radioSelector);
                     console.log(`🔍 Found ${radioButtons.length} radio buttons`);
-                    
+
                     for (const radio of radioButtons) {
                         const labelId = await radio.evaluate(el => el.getAttribute('aria-labelledby'));
                         if (labelId) {
-                            const labelText = await this.page.$eval(`#${labelId} .web_ui__Cell__title`, 
+                            const labelText = await this.page.$eval(`#${labelId} .web_ui__Cell__title`,
                                 el => el.textContent?.trim() || '').catch(() => '');
-                            
+
                             if (labelText) {
                                 console.log(`📋 Checking radio size: "${labelText}"`);
-                                
+
                                 // Porównaj z wszystkimi wariantami rozmiaru
-                                const labelMatch = uniqueSizeVariants.some((variant: string) => 
+                                const labelMatch = uniqueSizeVariants.some((variant: string) =>
                                     labelText === variant ||
                                     labelText.replace(/\./g, ',') === variant ||
                                     labelText.replace(/,/g, '.') === variant
-                                );                                if (labelMatch) {
+                                ); if (labelMatch) {
                                     await radio.click();
                                     console.log(`✅ Selected size via radio button: ${labelText} (matched with target: ${targetSize})`);
                                     sizeSelected = true;
@@ -2716,14 +3147,14 @@ export class VintedAutomation {
             if (!sizeSelected) {
                 console.log(`⚠️  Could not find size "${targetSize}" in the list`);
                 console.log(`🔄 Also tried variants:`, uniqueSizeVariants);
-                
+
                 // Debug: pokaż wszystkie dostępne rozmiary
                 try {
                     const availableSizes = await this.page.evaluate(() => {
                         const sizes = [];
                         const elements = document.querySelectorAll('*');
                         for (const el of elements) {
-                            if (el.id?.includes('size') && el.textContent?.trim() && 
+                            if (el.id?.includes('size') && el.textContent?.trim() &&
                                 !el.id.includes('input') && !el.id.includes('label')) {
                                 sizes.push({
                                     id: el.id,
@@ -2734,298 +3165,267 @@ export class VintedAutomation {
                         }
                         return sizes;
                     });
-                    
+
                     console.log('🔍 Available size options found:');
                     availableSizes.forEach((size, i) => {
-                        console.log(`   ${i+1}. "${size.text}" (id: ${size.id}, tag: ${size.tagName})`);
+                        console.log(`   ${i + 1}. "${size.text}" (id: ${size.id}, tag: ${size.tagName})`);
                     });
                 } catch (e) {
                     console.log('⚠️  Could not retrieve available sizes');
                 }
-                
+
                 console.log('💡 Available sizes can be selected manually');
             } else {
                 // Poczekaj na zamknięcie dropdown
                 await new Promise(resolve => setTimeout(resolve, 1000));
-            }        } catch (error) {
+            }
+        } catch (error) {
             console.error('❌ Error selecting size:', error);
             console.log('💡 Możesz wybrać rozmiar ręcznie w przeglądarce');
         }
     }
 
-    async selectCondition(advertisement: Advertisement) {
+    async selectCondition(advertisement: Advertisement, attempt: number = 1): Promise<void> {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
+            await this.refreshActivePageReference();
+            if (!this.page) throw new Error('Page not initialized');
+
             console.log('🏷️ Selecting condition:', advertisement.stan);
-            
+
+            const conditionDropdownSelectors = [
+                'input[data-testid="category-condition-single-list-input"]',
+                'input[data-testid="condition-select-dropdown-input"]',
+                'input[id="condition"]',
+                'input[name*="condition"]',
+                '[data-testid*="condition"] input'
+            ];
+
             // Sprawdź czy pole stanu w ogóle istnieje na stronie
-            const conditionFieldExists = await this.page.$('input[data-testid="condition-select-dropdown-input"]');
+            let conditionFieldExists = null;
+            let conditionSelectorUsed = '';
+            for (const selector of conditionDropdownSelectors) {
+                const found = await this.page.$(selector);
+                if (found) {
+                    conditionFieldExists = found;
+                    conditionSelectorUsed = selector;
+                    break;
+                }
+            }
+
             if (!conditionFieldExists) {
                 console.log('⚠️  Condition dropdown not found on page, skipping condition selection');
                 console.log('💡 This might be expected for some categories that don\'t require condition');
                 return;
             }
-            
+
             // Mapa stanów z bazy danych na opcje Vinted
             const conditionMap: Record<string, string> = {
                 'nowy z metką': 'Nowy z metką',
-                'nowy bez metki': 'Nowy bez metki', 
+                'nowy bez metki': 'Nowy bez metki',
                 'bardzo dobry': 'Bardzo dobry',
                 'dobry': 'Dobry',
                 'zadowalający': 'Zadowalający',
                 'zadowalające': 'Zadowalający'  // Dodanie mapowania dla formy z końcówką "-e"
             };
-            
+
             const dbCondition = advertisement.stan?.toLowerCase().trim() || '';
             const vintedCondition = conditionMap[dbCondition];
-            
+
             console.log(`🔍 Debug condition mapping:`);
             console.log(`   Database condition: "${advertisement.stan}"`);
             console.log(`   Normalized: "${dbCondition}"`);
             console.log(`   Mapped to Vinted: "${vintedCondition}"`);
-            
+
             if (!vintedCondition) {
                 console.log(`⚠️  Unknown condition "${advertisement.stan}", skipping condition selection`);
                 console.log(`💡 Available conditions: ${Object.keys(conditionMap).join(', ')}`);
                 return;
             }
-            
+
             console.log(`📁 Opening condition dropdown for: ${vintedCondition}...`);
-            
+
             // Kliknij dropdown stanu
-            await this.page.waitForSelector('input[data-testid="condition-select-dropdown-input"]', { timeout: 10000 });
-            await this.page.click('input[data-testid="condition-select-dropdown-input"]');
-            
+            await this.page.waitForSelector(conditionSelectorUsed, { timeout: 10000 });
+            await this.page.click(conditionSelectorUsed);
+
             // Poczekaj na załadowanie listy stanów - zwiększony czas
             console.log('⏳ Waiting for dropdown to open...');
             await new Promise(resolve => setTimeout(resolve, 2500));
-            
+
             // Sprawdź czy dropdown się otworzył
             const dropdownOpen = await this.page.evaluate(() => {
                 const elements = document.querySelectorAll('[id*="condition"]');
                 return elements.length > 1; // Więcej niż sam input
             });
-            
+
             console.log(`📊 Dropdown state: ${dropdownOpen ? 'OPEN' : 'CLOSED'}`);
-            
+
             if (!dropdownOpen) {
                 console.log('⚠️  Dropdown did not open, trying to click again...');
-                await this.page.click('input[data-testid="condition-select-dropdown-input"]');
+                await this.page.click(conditionSelectorUsed);
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
-            
-            // Znajdź i kliknij odpowiedni stan
+
+            // Znajdź i kliknij odpowiedni stan po aktualnym data-testid (condition-*)
             console.log(`🔍 Looking for condition: "${vintedCondition}"`);
-            
-            let conditionSelected = false;
-            
-            // Dodaj debugging - sprawdź jakie elementy są dostępne
-            try {
-                const allElements = await this.page.$$eval('*[id*="condition"]', 
-                    elements => elements.map(el => ({
-                        id: el.id,
-                        tagName: el.tagName,
-                        textContent: el.textContent?.trim(),
-                        className: el.className
-                    }))
-                );
-                console.log('🔍 Debug - found elements with "condition" in id:', allElements.slice(0, 10));
-            } catch (e) {
-                console.log('Debug failed, continuing...');
-            }
-            
-            // Metoda 1: Próbuj oryginalny selektor
-            try {
-                const conditionElements = await this.page.$$('li .web_ui__Cell__cell[id^="condition-"]');
-                console.log(`🔍 Found ${conditionElements.length} condition elements (method 1)`);
-                
-                for (const element of conditionElements) {
-                    try {
-                        const titleText = await element.$eval('.web_ui__Cell__title', el => el.textContent?.trim() || '');
-                        console.log(`📋 Checking condition: "${titleText}"`);
-                        
-                        if (titleText === vintedCondition) {
-                            await element.click();
-                            console.log(`✅ Selected condition: ${vintedCondition}`);
-                            conditionSelected = true;
-                            break;
-                        }
-                    } catch (elementError) {
-                        // Element może nie mieć tytułu, kontynuuj
-                        continue;
+
+            const selectionResult = await this.page.evaluate((targetCondition) => {
+                const normalize = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
+                const target = normalize(targetCondition);
+
+                const titleElements = Array.from(document.querySelectorAll('[data-testid^="condition-"][data-testid$="--title"]')) as HTMLElement[];
+                const availableTitles = titleElements
+                    .map(el => (el.textContent || '').trim())
+                    .filter(Boolean);
+
+                for (const titleEl of titleElements) {
+                    const titleText = (titleEl.textContent || '').trim();
+                    if (!titleText || normalize(titleText) !== target) continue;
+
+                    const optionEl = titleEl.closest('[data-testid^="condition-"]') as HTMLElement | null;
+                    const optionTestId = optionEl?.getAttribute('data-testid') || '';
+                    const optionMatch = optionTestId.match(/^condition-(\d+)$/);
+                    const optionId = optionMatch ? optionMatch[1] : '';
+
+                    if (optionEl) {
+                        optionEl.click();
                     }
-                }
-            } catch (error) {
-                console.log('❌ Method 1 failed');
-            }
-            
-            // Metoda 2: Jeśli nie znaleziono, spróbuj alternatywny selektor
-            if (!conditionSelected) {
-                try {
-                    const conditionElements2 = await this.page.$$('[id^="condition-"]');
-                    console.log(`🔍 Found ${conditionElements2.length} condition elements (method 2)`);
-                    
-                    for (const element of conditionElements2) {
-                        try {
-                            const titleText = await element.evaluate(el => el.textContent?.trim() || '');
-                            console.log(`📋 Checking condition (method 2): "${titleText}"`);
-                            
-                            if (titleText === vintedCondition) {
-                                await element.click();
-                                console.log(`✅ Selected condition: ${vintedCondition} (method 2)`);
-                                conditionSelected = true;
-                                break;
-                            }
-                        } catch (elementError) {
-                            continue;
+
+                    if (optionId) {
+                        const radioInput = document.querySelector(`[data-testid="condition-radio-${optionId}--input"], #condition-radio-${optionId}`) as HTMLInputElement | null;
+                        if (radioInput) {
+                            radioInput.click();
                         }
                     }
-                } catch (error) {
-                    console.log('❌ Method 2 failed');
+
+                    return {
+                        selected: true,
+                        selectedTitle: titleText,
+                        optionTestId,
+                        optionId,
+                        availableTitles
+                    };
                 }
+
+                return {
+                    selected: false,
+                    selectedTitle: '',
+                    optionTestId: '',
+                    optionId: '',
+                    availableTitles
+                };
+            }, vintedCondition);
+
+            if (!selectionResult.selected) {
+                console.log(`⚠️  Could not find condition "${vintedCondition}" in dropdown options`);
+                console.log('🔍 Available condition options found:', selectionResult.availableTitles);
+                throw new Error(`Nie znaleziono opcji stanu "${vintedCondition}"`);
             }
-            
-            // Metoda 3: Szukaj przez wszystkie elementy z tekstem
-            if (!conditionSelected) {
-                try {
-                    console.log('🔍 Trying method 3: search by text content...');
-                    conditionSelected = await this.page.evaluate((targetCondition) => {
-                        const elements = Array.from(document.querySelectorAll('*'));
-                        for (const element of elements) {
-                            if (element.textContent?.trim() === targetCondition && 
-                                element.id?.includes('condition')) {
-                                (element as HTMLElement).click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    }, vintedCondition);
-                    
-                    if (conditionSelected) {
-                        console.log(`✅ Selected condition: ${vintedCondition} (method 3)`);
-                    }
-                } catch (error) {
-                    console.log('❌ Method 3 failed');
+
+            console.log(`✅ Selected condition option: "${selectionResult.selectedTitle}" (${selectionResult.optionTestId || 'no-testid'})`);
+
+            // Poczekaj na zamknięcie dropdown/aktualizację inputu
+            await new Promise(resolve => setTimeout(resolve, 1200));
+
+            // Twarda walidacja stanu po wyborze
+            const selectedConditionValue = await this.page.evaluate(() => {
+                const selectors = [
+                    'input[data-testid="category-condition-single-list-input"]',
+                    'input[data-testid="condition-select-dropdown-input"]',
+                    'input[id="condition"]',
+                    'input[name*="condition"]',
+                    '[data-testid*="condition"] input'
+                ];
+
+                for (const selector of selectors) {
+                    const input = document.querySelector(selector) as HTMLInputElement | null;
+                    const value = (input?.value || '').trim();
+                    if (value && value.toLowerCase() !== 'on') return value;
                 }
+
+                const selectedCell = document.querySelector('[data-testid*="condition"] .web_ui__Cell__title, [id^="condition-"] .web_ui__Cell__title');
+                return (selectedCell?.textContent || '').trim();
+            });
+
+            if (!selectedConditionValue) {
+                throw new Error('Stan nie został wybrany poprawnie');
             }
-            
-            // Metoda 4: Szukaj przez Puppeteer evaluate z kliknięciem na parent
-            if (!conditionSelected) {
-                try {
-                    console.log('🔍 Trying method 4: evaluate with parent click...');
-                    conditionSelected = await this.page.evaluate((targetCondition) => {
-                        // Znajdź elementy z tekstem
-                        const walker = document.createTreeWalker(
-                            document.body,
-                            NodeFilter.SHOW_TEXT
-                        );
-                        
-                        let node;
-                        while (node = walker.nextNode()) {
-                            if (node.textContent?.trim() === targetCondition) {
-                                let parent = node.parentElement;
-                                while (parent) {
-                                    if (parent.id?.includes('condition') || 
-                                        parent.className?.includes('condition') ||
-                                        parent.getAttribute('role') === 'option') {
-                                        (parent as HTMLElement).click();
-                                        return true;
-                                    }
-                                    parent = parent.parentElement;
-                                }
-                            }
-                        }
-                        return false;
-                    }, vintedCondition);
-                    
-                    if (conditionSelected) {
-                        console.log(`✅ Selected condition: ${vintedCondition} (method 4)`);
-                    }
-                } catch (error) {
-                    console.log('❌ Method 4 failed');
-                }
+
+            const normalizeValue = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+            const normalizedSelected = normalizeValue(selectedConditionValue);
+            const normalizedExpected = normalizeValue(vintedCondition);
+            const conditionMatches =
+                normalizedSelected === normalizedExpected ||
+                normalizedSelected.includes(normalizedExpected) ||
+                normalizedExpected.includes(normalizedSelected);
+
+            if (!conditionMatches) {
+                throw new Error(`Wybrano inny stan niż oczekiwano: "${selectedConditionValue}" (oczekiwano: "${vintedCondition}")`);
             }
-            
-            if (!conditionSelected) {
-                console.log(`⚠️  Could not find condition "${vintedCondition}" in the list`);
-                
-                // Debug: pokaż wszystkie dostępne opcje stanu
-                try {
-                    const availableConditions = await this.page.evaluate(() => {
-                        const conditions = [];
-                        const elements = document.querySelectorAll('*');
-                        for (const el of elements) {
-                            if (el.id?.includes('condition') && el.textContent?.trim()) {
-                                conditions.push({
-                                    id: el.id,
-                                    text: el.textContent.trim(),
-                                    tagName: el.tagName
-                                });
-                            }
-                        }
-                        return conditions;
-                    });
-                    
-                    console.log('🔍 Available condition options found:');
-                    availableConditions.forEach((condition, i) => {
-                        console.log(`   ${i+1}. "${condition.text}" (id: ${condition.id}, tag: ${condition.tagName})`);
-                    });
-                } catch (e) {
-                    console.log('⚠️  Could not retrieve available conditions');
-                }
-                
-                console.log('💡 Available conditions can be selected manually');
-            } else {
-                // Poczekaj na zamknięcie dropdown
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
+
+            console.log(`✅ Condition confirmed: "${selectedConditionValue}"`);
+
         } catch (error) {
             console.error('❌ Error selecting condition:', error);
-            console.log('💡 Możesz wybrać stan ręcznie w przeglądarce');
+
+            const message = error instanceof Error ? error.message : String(error);
+            const isTransientFrameError =
+                message.includes('detached Frame') ||
+                message.includes('Execution context was destroyed') ||
+                message.includes('Cannot find context with specified id');
+
+            if (isTransientFrameError && attempt < 2) {
+                console.log('🔄 Detached frame during condition selection, refreshing page reference and retrying once...');
+                await this.refreshActivePageReference();
+                return this.selectCondition(advertisement, attempt + 1);
+            }
+
+            console.log('💡 Wybór stanu jest krytyczny - przerywam automatyzację dla tego ogłoszenia');
+            throw error;
         }
     }
 
     async selectColor(advertisement: Advertisement) {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
             console.log('🎨 Selecting color:', advertisement.color);
-            
+
             const targetColor = advertisement.color?.trim() || '';
-            
+
             if (!targetColor) {
                 console.log('⚠️  No color specified, skipping color selection');
                 return;
             }
-            
+
             console.log(`📁 Opening color dropdown...`);
-            
+
             // Sprawdź czy dropdown jest już otwarty
             const isDropdownOpen = await this.page.$('.web_ui__Cell__cell[id^="color-"]');
-            
+
             if (!isDropdownOpen) {
                 // Kliknij dropdown koloru
                 await this.page.waitForSelector('input[data-testid="color-select-dropdown-input"]', { timeout: 10000 });
                 await this.page.click('input[data-testid="color-select-dropdown-input"]');
-                
+
                 // Poczekaj na załadowanie listy kolorów
                 await new Promise(resolve => setTimeout(resolve, 2000));
             } else {
                 console.log('✅ Color dropdown already open');
             }
-            
+
             // Znajdź i kliknij odpowiedni kolor
             console.log(`🔍 Looking for color: "${targetColor}"`);
-            
+
             let colorSelected = false;
-            
+
             try {
                 // Szukaj po poprawnym selektorze - elementy są w li z div[id^="color-"]
                 const colorElements = await this.page.$$('li .web_ui__Cell__cell[id^="color-"]');
                 console.log(`🔍 Found ${colorElements.length} color elements`);
-                
+
                 // Debug: wypisz wszystkie dostępne kolory
                 console.log('🎨 Available colors:');
                 for (const element of colorElements) {
@@ -3037,44 +3437,44 @@ export class VintedAutomation {
                         // Ignore elements without title
                     }
                 }
-                
+
                 console.log(`🎯 Looking for exact match: "${targetColor}"`);
-                
+
                 for (const element of colorElements) {
                     try {
                         const titleText = await element.$eval('.web_ui__Cell__title', el => el.textContent?.trim() || '');
                         console.log(`📋 Checking color: "${titleText}"`);
-                        
+
                         if (titleText.toLowerCase() === targetColor.toLowerCase()) {
                             // Znajdź konkretny ID tego elementu koloru i checkbox
                             const colorId = await element.evaluate(el => el.id);
                             const colorNumber = colorId.replace('color-', '');
                             const checkboxId = `color-checkbox-${colorNumber}`;
-                            
+
                             console.log(`🎯 Found target color "${titleText}" with element ID: ${colorId}, checkbox ID: ${checkboxId}`);
-                            
+
                             // Kliknij bezpośrednio w checkbox używając jego ID
                             try {
                                 await this.page.click(`#${checkboxId}`);
                                 console.log(`✅ Clicked checkbox #${checkboxId} for color: ${titleText}`);
                                 colorSelected = true;
-                                
+
                                 // Sprawdź od razu czy checkbox jest zaznaczony
                                 await new Promise(resolve => setTimeout(resolve, 300));
                                 const isChecked = await this.page.evaluate((id) => {
                                     const checkbox = document.getElementById(id) as HTMLInputElement;
                                     return checkbox ? checkbox.checked : false;
                                 }, checkboxId);
-                                
+
                                 console.log(`🔍 Checkbox ${checkboxId} checked status: ${isChecked}`);
-                                
+
                                 if (!isChecked) {
                                     console.log(`⚠️  Checkbox not checked, trying alternative click...`);
                                     // Spróbuj kliknąć w element koloru zamiast checkbox
                                     await this.page.click(`#${colorId}`);
                                     await new Promise(resolve => setTimeout(resolve, 300));
                                 }
-                                
+
                             } catch (checkboxError) {
                                 console.log(`⚠️  Checkbox click failed, trying element click...`);
                                 // Fallback - kliknij na element koloru
@@ -3082,11 +3482,11 @@ export class VintedAutomation {
                                 console.log(`✅ Selected color (by element click): ${titleText}`);
                                 colorSelected = true;
                             }
-                            
+
                             // Poczekaj dłużej przed zamknięciem dropdown
                             console.log('🔄 Waiting before closing color dropdown...');
                             await new Promise(resolve => setTimeout(resolve, 1000));
-                            
+
                             // Zamknij dropdown przez kliknięcie w konkretny element - nota o wysyłce
                             try {
                                 console.log('🔄 Closing color dropdown by clicking shipping note...');
@@ -3104,7 +3504,7 @@ export class VintedAutomation {
                                     console.log('⚠️  Could not close dropdown, but color selected');
                                 }
                             }
-                            
+
                             break;
                         }
                     } catch (elementError) {
@@ -3115,7 +3515,7 @@ export class VintedAutomation {
             } catch (error) {
                 console.log('❌ Error finding color elements');
             }
-            
+
             if (!colorSelected) {
                 console.log(`⚠️  Could not find color "${targetColor}" in the list`);
                 console.log('💡 Available colors can be selected manually');
@@ -3123,7 +3523,7 @@ export class VintedAutomation {
                 // Finalna weryfikacja po zamknięciu dropdown
                 console.log('🔍 Final verification of color selection...');
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                
+
                 const finalCheck = await this.page.evaluate((targetColor) => {
                     const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
                     const results = [];
@@ -3140,9 +3540,9 @@ export class VintedAutomation {
                     }
                     return results;
                 }, targetColor);
-                
+
                 console.log(`🔍 Currently selected colors: [${finalCheck.join(', ')}]`);
-                
+
                 if (finalCheck.includes(targetColor)) {
                     console.log(`✅ Color "${targetColor}" is correctly selected`);
                 } else if (finalCheck.length > 0) {
@@ -3151,7 +3551,7 @@ export class VintedAutomation {
                     console.log(`⚠️  No color appears to be selected`);
                 }
             }
-            
+
         } catch (error) {
             console.error('❌ Error selecting color:', error);
             console.log('💡 Możesz wybrać kolor ręcznie w przeglądarce');
@@ -3160,20 +3560,20 @@ export class VintedAutomation {
 
     async verifyColorSelection(expectedColor: string): Promise<boolean> {
         if (!this.page) return false;
-        
+
         try {
             // Sprawdź czy dropdown koloru pokazuje wybrany kolor
             const selectedValue = await this.page.$eval(
-                'input[data-testid="color-select-dropdown-input"]', 
+                'input[data-testid="color-select-dropdown-input"]',
                 el => (el as HTMLInputElement).value || el.getAttribute('value') || ''
             );
-            
+
             const isSelected = selectedValue.toLowerCase().includes(expectedColor.toLowerCase()) ||
-                              expectedColor.toLowerCase().includes(selectedValue.toLowerCase());
-            
+                expectedColor.toLowerCase().includes(selectedValue.toLowerCase());
+
             console.log(`🔍 Color verification: expected "${expectedColor}", found "${selectedValue}", selected: ${isSelected}`);
             return isSelected;
-            
+
         } catch (error) {
             console.log('❌ Could not verify color selection');
             return false;
@@ -3182,38 +3582,80 @@ export class VintedAutomation {
 
     async fillPrice(advertisement: Advertisement) {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
             console.log('💰 Filling price:', advertisement.price);
-            
-            const price = advertisement.price?.trim() || '';
-            
+
+            const price = advertisement.price ? String(advertisement.price).trim() : '';
+
             if (!price) {
                 console.log('⚠️  No price specified, skipping price input');
                 return;
             }
-            
-            // Znajdź pole ceny
+
+            // Znajdź pole ceny - lista selektorów
             console.log('🔍 Looking for price input field...');
-            await this.page.waitForSelector('input[data-testid="price-input--input"]', { timeout: 10000 });
-            
-            // Wyczyść pole i wpisz cenę
-            await this.page.click('input[data-testid="price-input--input"]');
-            await this.page.evaluate(() => {
-                const input = document.querySelector('input[data-testid="price-input--input"]') as HTMLInputElement;
-                if (input) {
-                    input.value = '';
-                    input.focus();
+
+            const priceSelectors = [
+                '#price',
+                'input[name="price"]',
+                'input[data-testid="price-input--input"]',
+                'input[placeholder*="0,00"]'
+            ];
+
+            let priceInput = null;
+            let usedSelector = '';
+
+            for (const selector of priceSelectors) {
+                try {
+                    priceInput = await this.page.$(selector);
+                    if (priceInput) {
+                        console.log(`✅ Found price input with selector: ${selector}`);
+                        usedSelector = selector;
+                        break;
+                    }
+                } catch (e) {
+                    continue;
                 }
-            });
-            
-            // Wpisz cenę
-            await this.page.type('input[data-testid="price-input--input"]', price);
+            }
+
+            if (!priceInput) {
+                throw new Error('Price input not found');
+            }
+
+            // Kliknij w pole (używając znalezionego selektora)
+            await this.page.click(usedSelector);
+
+            // Wyczyść pole używając klawiatury (pewniejsze dla Reacta)
+            await this.page.keyboard.down('Control');
+            await this.page.keyboard.press('a');
+            await this.page.keyboard.up('Control');
+            await this.page.keyboard.press('Backspace');
+
+            // Wpisz cenę z opóźnieniem
+            await this.page.type(usedSelector, price, { delay: 100 });
             console.log(`✅ Price filled: ${price} zł`);
-            
+
             // Poczekaj chwilę na aktualizację
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
+            // Weryfikacja
+            const inputValue = await this.page.$eval(usedSelector, el => (el as HTMLInputElement).value);
+            if (inputValue !== price) {
+                console.log(`⚠️  Price mismatch! Expected: ${price}, Found: ${inputValue}. Retrying...`);
+                // Retry logic
+                await this.page.click(usedSelector);
+                await this.page.evaluate((sel, val) => {
+                    const input = document.querySelector(sel) as HTMLInputElement;
+                    if (input) {
+                        input.value = val;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        input.dispatchEvent(new Event('blur', { bubbles: true }));
+                    }
+                }, usedSelector, price);
+            }
+
         } catch (error) {
             console.error('❌ Error filling price:', error);
             console.log('💡 Możesz wpisać cenę ręcznie w przeglądarce');
@@ -3222,13 +3664,13 @@ export class VintedAutomation {
 
     async verifyAllFields(advertisement: Advertisement): Promise<boolean> {
         if (!this.page) return false;
-        
+
         try {
             console.log('🔍 Verifying all form fields...');
-            
+
             let allFieldsOk = true;
             const issues: string[] = [];
-            
+
             // Sprawdź tytuł
             try {
                 const title = await this.page.$eval(
@@ -3245,7 +3687,7 @@ export class VintedAutomation {
                 issues.push('❌ Could not verify title');
                 allFieldsOk = false;
             }
-            
+
             // Sprawdź opis
             try {
                 const description = await this.page.$eval(
@@ -3262,7 +3704,7 @@ export class VintedAutomation {
                 issues.push('❌ Could not verify description');
                 allFieldsOk = false;
             }
-            
+
             // Sprawdź kategorię
             try {
                 const category = await this.page.$eval(
@@ -3279,13 +3721,26 @@ export class VintedAutomation {
                 issues.push('❌ Could not verify category');
                 allFieldsOk = false;
             }
-            
+
             // Sprawdź markę
             try {
-                const brand = await this.page.$eval(
-                    'input[data-testid="brand-select-dropdown-input"]',
-                    el => (el as HTMLInputElement).value
-                );
+                const brand = await this.page.evaluate(() => {
+                    const selectors = [
+                        'input[data-testid="brand-select-dropdown-input"]',
+                        'input[id="brand"]',
+                        'input[name*="brand"]',
+                        '[data-testid*="brand"] input'
+                    ];
+
+                    for (const selector of selectors) {
+                        const input = document.querySelector(selector) as HTMLInputElement | null;
+                        const value = (input?.value || '').trim();
+                        if (value) return value;
+                    }
+
+                    const selectedCell = document.querySelector('[data-testid*="brand"] .web_ui__Cell__title, [id^="brand-"] .web_ui__Cell__title');
+                    return (selectedCell?.textContent || '').trim();
+                });
                 if (!brand || brand.trim().length === 0) {
                     issues.push('❌ Brand is not selected');
                     allFieldsOk = false;
@@ -3296,30 +3751,68 @@ export class VintedAutomation {
                 issues.push('❌ Could not verify brand');
                 allFieldsOk = false;
             }
-            
+
             // Sprawdź rozmiar
             try {
-                const size = await this.page.$eval(
-                    'input[data-testid="size-select-dropdown-input"]',
-                    el => (el as HTMLInputElement).value
-                );
-                if (!size || size.trim().length === 0) {
-                    issues.push('❌ Size is not selected');
-                    allFieldsOk = false;
+                const expectsOptionalSize = this.isAccessoryNoSizeCategory(advertisement.rodzaj || '');
+                const expectedSize = (advertisement.rozmiar || '').trim();
+
+                const sizeInput = await this.page.$('input[data-testid="size-select-dropdown-input"]');
+
+                if (!sizeInput) {
+                    if (expectsOptionalSize || expectedSize.toLowerCase() === 'uniwersalny') {
+                        console.log('ℹ️  Size field not present for this category - accepted');
+                    } else {
+                        issues.push('❌ Could not verify size');
+                        allFieldsOk = false;
+                    }
                 } else {
-                    console.log(`✅ Size: "${size}"`);
+                    const size = await this.page.$eval(
+                        'input[data-testid="size-select-dropdown-input"]',
+                        el => (el as HTMLInputElement).value
+                    );
+
+                    if (!size || size.trim().length === 0) {
+                        if (expectsOptionalSize || expectedSize.toLowerCase() === 'uniwersalny') {
+                            console.log('ℹ️  Empty size value accepted for optional-size category');
+                        } else {
+                            issues.push('❌ Size is not selected');
+                            allFieldsOk = false;
+                        }
+                    } else {
+                        console.log(`✅ Size: "${size}"`);
+                    }
                 }
             } catch (error) {
-                issues.push('❌ Could not verify size');
-                allFieldsOk = false;
+                const expectsOptionalSize = this.isAccessoryNoSizeCategory(advertisement.rodzaj || '');
+                const expectedSize = (advertisement.rozmiar || '').trim().toLowerCase();
+                if (expectsOptionalSize || expectedSize === 'uniwersalny') {
+                    console.log('ℹ️  Size verification failed but accepted for optional-size category');
+                } else {
+                    issues.push('❌ Could not verify size');
+                    allFieldsOk = false;
+                }
             }
-            
+
             // Sprawdź stan
             try {
-                const condition = await this.page.$eval(
-                    'input[data-testid="condition-select-dropdown-input"]',
-                    el => (el as HTMLInputElement).value
-                );
+                const condition = await this.page.evaluate(() => {
+                    const selectors = [
+                        'input[data-testid="condition-select-dropdown-input"]',
+                        'input[id="condition"]',
+                        'input[name*="condition"]',
+                        '[data-testid*="condition"] input'
+                    ];
+
+                    for (const selector of selectors) {
+                        const input = document.querySelector(selector) as HTMLInputElement | null;
+                        const value = (input?.value || '').trim();
+                        if (value) return value;
+                    }
+
+                    const selectedCell = document.querySelector('[data-testid*="condition"] .web_ui__Cell__title, [id^="condition-"] .web_ui__Cell__title');
+                    return (selectedCell?.textContent || '').trim();
+                });
                 if (!condition || condition.trim().length === 0) {
                     issues.push('❌ Condition is not selected');
                     allFieldsOk = false;
@@ -3330,19 +3823,19 @@ export class VintedAutomation {
                 issues.push('❌ Could not verify condition');
                 allFieldsOk = false;
             }
-            
+
             // Sprawdź kolor (opcjonalny)
             try {
                 const color = await this.page.$eval(
                     'input[data-testid="color-select-dropdown-input"]',
                     el => (el as HTMLInputElement).value || el.getAttribute('value') || ''
                 );
-                
+
                 if (advertisement.color && advertisement.color.trim().length > 0) {
                     // Sprawdź czy wybrany kolor pasuje do oczekiwanego
                     const isSelected = color.toLowerCase().includes(advertisement.color.toLowerCase()) ||
-                                      advertisement.color.toLowerCase().includes(color.toLowerCase());
-                    
+                        advertisement.color.toLowerCase().includes(color.toLowerCase());
+
                     // Dodatkowo sprawdź czy checkbox koloru jest zaznaczony
                     const isColorActuallySelected = await this.page.evaluate((targetColor) => {
                         const colorElements = document.querySelectorAll('li .web_ui__Cell__cell[id^="color-"]');
@@ -3355,7 +3848,7 @@ export class VintedAutomation {
                         }
                         return false;
                     }, advertisement.color);
-                    
+
                     if (isColorActuallySelected) {
                         console.log(`✅ Color: "${advertisement.color}" (verified via checkbox)`);
                     } else if (isSelected && color.trim().length > 0) {
@@ -3376,7 +3869,7 @@ export class VintedAutomation {
             } catch (error) {
                 console.log('ℹ️  Color field not found or not verifiable');
             }
-            
+
             // Sprawdź cenę
             try {
                 const price = await this.page.$eval(
@@ -3393,14 +3886,16 @@ export class VintedAutomation {
                 issues.push('❌ Could not verify price');
                 allFieldsOk = false;
             }
-            
+
             // Sprawdź zdjęcia
             try {
-                const photosCount = await this.page.evaluate(() => {
-                    const photoElements = document.querySelectorAll('img[src*="blob:"], .photo-preview, .image-preview');
-                    return photoElements.length;
-                });
-                
+                let photosCount = 0;
+                for (let attempt = 1; attempt <= 4; attempt++) {
+                    photosCount = await this.getUploadedPhotosCount();
+                    if (photosCount > 0) break;
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                }
+
                 if (photosCount === 0) {
                     issues.push('❌ No photos uploaded');
                     allFieldsOk = false;
@@ -3411,16 +3906,16 @@ export class VintedAutomation {
                 issues.push('❌ Could not verify photos');
                 allFieldsOk = false;
             }
-            
+
             if (allFieldsOk) {
                 console.log('🎉 All form fields verified successfully!');
             } else {
                 console.log('⚠️  Some issues found with form fields:');
                 issues.forEach(issue => console.log(`   ${issue}`));
             }
-            
+
             return allFieldsOk;
-            
+
         } catch (error) {
             console.error('❌ Error verifying form fields:', error);
             return false;
@@ -3429,23 +3924,23 @@ export class VintedAutomation {
 
     async saveDraftAndMarkComplete(advertisementId: string) {
         if (!this.page) throw new Error('Page not initialized');
-        
+
         try {
             // Kliknij przycisk "Wersja robocza"
             console.log('💾 Saving as draft...');
-            
+
             // Sprawdź czy przycisk jest dostępny
             await this.page.waitForSelector('button[data-testid="upload-form-save-draft-button"]', { timeout: 10000 });
-            
+
             // Sprawdź czy przycisk jest kliknny
             const isClickable = await this.page.evaluate(() => {
                 const button = document.querySelector('button[data-testid="upload-form-save-draft-button"]') as HTMLButtonElement;
                 if (!button) return { exists: false };
-                
+
                 const rect = button.getBoundingClientRect();
                 const isVisible = rect.width > 0 && rect.height > 0;
                 const isEnabled = !button.disabled;
-                
+
                 return {
                     exists: true,
                     isVisible,
@@ -3454,18 +3949,18 @@ export class VintedAutomation {
                     canClick: isVisible && isEnabled
                 };
             });
-            
+
             console.log('🔍 Button state:', isClickable);
-            
+
             if (!isClickable.canClick) {
                 console.log('⚠️  Button is not clickable, waiting 3 seconds...');
                 await new Promise(resolve => setTimeout(resolve, 3000));
             }
-            
+
             // Zapisz aktualny URL przed kliknięciem
             const currentUrl = this.page.url();
             console.log(`📍 Current URL: ${currentUrl}`);
-            
+
             // Użyj evaluate do bezpośredniego kliknięcia
             const clicked = await this.page.evaluate(() => {
                 const button = document.querySelector('button[data-testid="upload-form-save-draft-button"]') as HTMLButtonElement;
@@ -3475,7 +3970,7 @@ export class VintedAutomation {
                 }
                 return false;
             });
-            
+
             if (clicked) {
                 console.log('✅ Successfully clicked "Wersja robocza" button via JavaScript');
             } else {
@@ -3483,7 +3978,7 @@ export class VintedAutomation {
                 throw new Error('Could not click draft button');
             }
             console.log('⏳ Waiting for page redirect...');
-            
+
             // Czekaj na przekierowanie (zmianę URL) lub komunikat o sukcesie
             try {
                 // Opcja 1: Sprawdź przekierowanie
@@ -3493,14 +3988,14 @@ export class VintedAutomation {
                     currentUrl
                 );
                 console.log('✅ Page redirected successfully');
-                
+
                 // Dodatowe oczekiwanie na pełne załadowanie nowej strony
                 await new Promise(resolve => setTimeout(resolve, 3000));
                 console.log('✅ New page fully loaded');
-                
+
             } catch (redirectError) {
                 console.log('⏳ No immediate redirect, checking for success indicators...');
-                
+
                 // Opcja 2: Sprawdź czy jest komunikat o sukcesie lub zmiana na stronie
                 try {
                     await this.page.waitForSelector('.success-message, .draft-saved, [data-testid*="success"]', { timeout: 5000 });
@@ -3514,23 +4009,76 @@ export class VintedAutomation {
                         console.log('⚠️  No clear success indication, but continuing...');
                     }
                 }
-                
+
                 // Poczekaj trochę na zapisanie
                 await new Promise(resolve => setTimeout(resolve, 5000));
             }
-            
+
             // Oznacz ogłoszenie jako opublikowane do Vinted
             console.log('📝 Marking advertisement as published to Vinted...');
-            
-            const { updateVintedPublishStatus } = await import('./supabaseFetcher');
+
+            // Czekaj na przekierowanie do strony użytkownika
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            // Pobierz URL pierwszego ogłoszenia z listy (najnowsze - właśnie dodane)
+            let vintedItemUrl = null;
+            try {
+                console.log('🔍 Searching for the newest advertisement URL...');
+
+                // Znajdź pierwszy element ogłoszenia z linkiem do edycji
+                vintedItemUrl = await this.page.evaluate(() => {
+                    // Szukaj pierwszego elementu z data-testid="grid-item"
+                    const firstItem = document.querySelector('[data-testid="grid-item"]');
+                    if (!firstItem) return null;
+
+                    // Szukaj linku do edycji w formacie /items/[ID]/edit
+                    const editLink = firstItem.querySelector('a[href*="/items/"][href*="/edit"]');
+                    if (!editLink) return null;
+
+                    const href = editLink.getAttribute('href');
+                    if (!href) return null;
+
+                    // Przekształć /items/7579749349/edit na https://www.vinted.pl/items/7579749349
+                    const match = href.match(/\/items\/(\d+)/);
+                    if (match && match[1]) {
+                        return `https://www.vinted.pl/items/${match[1]}`;
+                    }
+
+                    return null;
+                });
+
+                if (vintedItemUrl) {
+                    console.log(`✅ Found advertisement URL: ${vintedItemUrl}`);
+                } else {
+                    console.log('⚠️  Could not extract advertisement URL from page');
+                }
+            } catch (error) {
+                console.error('❌ Error extracting Vinted URL:', error);
+            }
+
+            const { updateVintedPublishStatus, saveVintedUrl } = await import('./supabaseFetcher');
+
+            // Zapisz URL do bazy danych jeśli udało się go pobrać
+            if (vintedItemUrl) {
+                const urlResult = await saveVintedUrl(advertisementId, vintedItemUrl);
+                if (urlResult.success) {
+                    console.log('✅ Vinted URL saved to database');
+                } else {
+                    console.log('⚠️  Failed to save Vinted URL to database');
+                }
+            } else {
+                console.log('⚠️  Skipping URL save - URL not found');
+            }
+
+            // Oznacz jako opublikowane
             const success = await updateVintedPublishStatus(advertisementId, true);
-            
+
             if (success) {
                 console.log('✅ Advertisement marked as published to Vinted in database');
             } else {
                 console.log('⚠️  Failed to update Vinted publish status in database');
             }
-            
+
         } catch (error) {
             console.error('❌ Error saving draft or updating database:', error);
             console.log('💡 You may need to save manually');
@@ -3555,10 +4103,10 @@ export class VintedAutomation {
         }
 
         console.log(`🔄 Processing advertisement: ${ad.marka} ${ad.rodzaj}`);
-        
+
         // Przygotuj ogłoszenie - wygeneruj tytuł i opis
         const preparedAd = await this.prepareAdvertisement(ad);
-        
+
         console.log(`📊 Advertisement data:`, {
             originalData: {
                 marka: ad.marka,
@@ -3573,25 +4121,25 @@ export class VintedAutomation {
             },
             isCompleted: ad.is_completed
         });
-        
+
         try {
             // Dodaj zdjęcia najpierw
             if (preparedAd.photos && preparedAd.photos.length > 0) {
                 console.log('📸 Adding photos...');
                 await this.addPhotos(preparedAd.photos, ad.photo_rotations);
                 console.log('✅ Photos added');
-                
+
                 // Poczekaj chwilę na przetworzenie zdjęć
                 console.log('⏳ Waiting for photos to process...');
                 await new Promise(resolve => setTimeout(resolve, 3000));
             } else {
                 console.log('ℹ️  No photos to upload');
             }
-            
+
             // Poczekaj chwilę na załadowanie formularza
             console.log('⏳ Waiting 2 seconds for form to be ready...');
             await new Promise(resolve => setTimeout(resolve, 2000));
-            
+
             // Wypełnij tytuł
             if (preparedAd.title && preparedAd.title.trim().length > 0) {
                 console.log('📝 Filling title...');
@@ -3600,11 +4148,11 @@ export class VintedAutomation {
             } else {
                 console.log('⚠️  No valid title generated for this advertisement');
             }
-            
+
             // Poczekaj chwilę między akcjami
             console.log('⏳ Waiting 1 second before filling description...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wypełnij opis
             if (preparedAd.description && preparedAd.description.trim().length > 0) {
                 console.log('📄 Filling description...');
@@ -3613,81 +4161,81 @@ export class VintedAutomation {
             } else {
                 console.log('⚠️  No valid description generated for this advertisement');
             }
-            
+
             // Poczekaj chwilę przed wyborem kategorii
             console.log('⏳ Waiting 1 second before selecting category...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wybierz kategorię
             console.log('🏷️ Selecting category...');
             await this.selectCategory(ad);
             console.log('✅ Category selected');
-            
+
             // Sprawdź i zaznacz checkbox Unisex jeśli istnieje (dla akcesoriów)
             await this.checkAndSelectUnisexIfAvailable();
-            
+
             // Poczekaj dłużej przed wyborem marki - Vinted może ładować marki dla danej kategorii
             console.log('⏳ Waiting 3 seconds for brand field to become available after category selection...');
             await new Promise(resolve => setTimeout(resolve, 3000));
-            
+
             // Wybierz markę
             console.log('🏷️ Selecting brand...');
             await this.selectBrand(ad);
             console.log('✅ Brand selected');
-            
+
             // Poczekaj chwilę przed wyborem rozmiaru
             console.log('⏳ Waiting 1 second before selecting size...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wybierz rozmiar
             console.log('📏 Selecting size...');
             await this.selectSize(ad);
             console.log('✅ Size selected');
-            
+
             // Poczekaj chwilę przed wyborem stanu
             console.log('⏳ Waiting 1 second before selecting condition...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wybierz stan
             console.log('🏷️ Selecting condition...');
             await this.selectCondition(ad);
             console.log('✅ Condition selected');
-            
+
             // Poczekaj chwilę przed wyborem koloru
             console.log('⏳ Waiting 1 second before selecting color...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wybierz kolor
             console.log('🎨 Selecting color...');
             await this.selectColor(ad);
             console.log('✅ Color selected');
-            
+
             // Poczekaj chwilę przed wypełnieniem ceny
             console.log('⏳ Waiting 1 second before filling price...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Wypełnij cenę
             console.log('💰 Filling price...');
             await this.fillPrice(ad);
             console.log('✅ Price filled');
-            
+
             // Zweryfikuj wszystkie pola przed zapisaniem
             console.log('🔍 Final verification before saving...');
             const allFieldsOk = await this.verifyAllFields(ad);
-            
+
             if (!allFieldsOk) {
                 console.log('⚠️  Some fields are missing or incorrect. Please check manually.');
                 console.log('💡 You can continue manually in the browser and save the draft.');
-                // Mimo problemów, kontynuuj z zapisem - użytkownik może poprawić ręcznie
+                throw new Error('Krytyczne pola formularza nie zostały ustawione poprawnie (marka/stan/zdjęcia)');
             }
-            
+
             // Zapisz jako wersję roboczą i oznacz jako ukończone
             console.log('💾 Finalizing advertisement...');
             await this.saveDraftAndMarkComplete(ad.id);
             console.log('✅ Advertisement finalized');
-            
+
             console.log(`🎉 Advertisement processed successfully: ${preparedAd.title}`);
-            
+
         } catch (error) {
             console.error(`❌ Error processing advertisement ${ad.marka} ${ad.rodzaj}:`, error);
             throw error;
@@ -3696,34 +4244,37 @@ export class VintedAutomation {
 
     async waitForUserInteraction(message: string, timeoutSeconds: number = 60) {
         if (!this.page) return;
-        
+
         console.log(`\n🔄 ${message}`);
         console.log(`⏳ Czekam ${timeoutSeconds} sekund na Twoją akcję...`);
         console.log('💡 Możesz kontynuować ręcznie w przeglądarce, a następnie naciśnij Enter w terminalu');
-        
+
         // Czekaj określony czas
         await new Promise(resolve => setTimeout(resolve, timeoutSeconds * 1000));
     }
 
     async startWithExistingBrowser(userId?: string) {
         try {
+            // Store userId for later use
+            this.userId = userId;
+
             console.log('🚀 Starting Vinted automation with existing browser...');
             console.log('🔍 Sprawdzanie połączenia z Chrome...');
-            
+
             // Połącz z istniejącą przeglądarką (lub uruchom automatycznie)
             await this.initWithExistingBrowser();
-            
+
             // Dodatkowa ochrona przed dialogami
             if (this.page) {
                 await this.page.evaluateOnNewDocument(() => {
                     // Nadpisz window.confirm, alert i beforeunload
                     window.confirm = () => true;
-                    window.alert = () => {};
+                    window.alert = () => { };
                     window.onbeforeunload = null;
-                    
+
                     // Usuń wszystkie event listenery beforeunload
                     const originalAddEventListener = window.addEventListener;
-                    window.addEventListener = function(event: any, handler: any, options: any) {
+                    window.addEventListener = function (event: any, handler: any, options: any) {
                         if (event === 'beforeunload') {
                             return; // Ignoruj beforeunload listenery
                         }
@@ -3731,70 +4282,73 @@ export class VintedAutomation {
                     };
                 });
             }
-            
+
             // Sprawdź czy jesteś na Vinted, jeśli nie - przejdź tam
             if (!this.page?.url().includes('vinted.pl')) {
                 console.log('📍 Navigating to Vinted...');
                 await this.page?.goto('https://www.vinted.pl', { waitUntil: 'networkidle2' });
             }
-            
+
             // Sprawdź logowanie
             const isLoggedIn = await this.checkIfLoggedIn();
             if (!isLoggedIn) {
                 console.log('⚠️ Użytkownik nie jest zalogowany');
-                
+
                 // Czekaj na zalogowanie użytkownika
                 const loginSuccess = await this.waitForLogin(5); // 5 minut
-                
+
                 if (!loginSuccess) {
                     throw new Error('Nie udało się zalogować w wyznaczonym czasie');
                 }
             } else {
                 console.log('✅ Użytkownik już jest zalogowany');
             }
-            
+
             // Kliknij przycisk "Sprzedaj"
             await this.clickSellButton();
-            
+
             // Poczekaj na załadowanie formularza
             await new Promise(resolve => setTimeout(resolve, 3000));
-            
+
             // Pobierz ogłoszenia z bazy danych - tylko nieopublikowane do Vinted
             console.log('📥 Fetching unpublished advertisements from database...');
             const advertisements = await fetchUnpublishedToVintedAdvertisements(userId);
-            
+
             if (advertisements.length === 0) {
                 console.log('❌ No unpublished advertisements found in database');
                 console.log('💡 Tip: Check if any advertisements have is_published_to_vinted = false');
                 return;
             }
-            
+
             console.log(`✅ Found ${advertisements.length} unpublished advertisements`);
-            
+
             // Przetwarzaj ogłoszenia jedno po drugim
             for (let i = 0; i < advertisements.length; i++) {
                 const ad = advertisements[i] as Advertisement;
-                
+
                 if (ad && !ad.is_published_to_vinted) {
                     console.log(`\n🔄 Processing advertisement ${i + 1}/${advertisements.length}: ${ad.marka} ${ad.rodzaj}`);
-                    
+
                     try {
                         await this.processAdvertisement(ad);
                         console.log(`✅ Advertisement ${i + 1} completed successfully!`);
-                        
+
+                        // Wyczyść tymczasowe zdjęcia po przetworzeniu ogłoszenia
+                        await this.cleanupTempFiles();
+
                         // Jeśli to nie ostatnie ogłoszenie, przygotuj się do następnego
                         if (i < advertisements.length - 1) {
                             console.log('\n🔄 Preparing for next advertisement...');
                             console.log('📝 Navigating to create new listing...');
-                            
+
                             // Przejdź bezpośrednio na stronę dodawania nowego ogłoszenia
                             await this.navigateToNewListing();
-                            
+
                             // Poczekaj na załadowanie formularza
                             await new Promise(resolve => setTimeout(resolve, 3000));
                             console.log('✅ Ready for next advertisement');
                         }
-                        
+
                     } catch (error) {
                         console.error(`❌ Error processing advertisement ${i + 1}:`, error);
                         console.log('⏭️  Skipping to next advertisement...');
@@ -3804,27 +4358,27 @@ export class VintedAutomation {
                     console.log(`⏭️  Skipping completed advertisement: ${ad.marka} ${ad.rodzaj}`);
                 }
             }
-            
+
             console.log('\n🎉 All advertisements processed!');
             console.log('✅ Automation completed successfully.');
-            
+
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            
+
             // Specjalna obsługa dla przypadku uruchomienia Chrome
             if (errorMessage === 'CHROME_STARTED_PLEASE_LOGIN') {
                 console.log('🎯 Chrome został uruchomiony. Program kończy działanie.');
                 return; // Zakończ bez błędu
             }
-            
+
             console.error('❌ Error in Vinted automation:', error);
-            
+
             if (errorMessage.includes('TimeoutError') || errorMessage.includes('Waiting for selector')) {
                 console.log('\n💡 Rozwiązania problemów:');
                 console.log('1. Sprawdź czy jesteś zalogowany na Vinted');
                 console.log('2. Sprawdź czy strona się w pełni załadowała');
                 console.log('3. Vinted może zmienić interfejs - spróbuj ręcznie');
-                
+
                 await this.waitForUserInteraction('Możesz kontynuować ręcznie w przeglądarce', 120);
             }
         }
@@ -3832,29 +4386,32 @@ export class VintedAutomation {
 
     async start(userId?: string) {
         try {
+            // Store userId for later use
+            this.userId = userId;
+
             console.log('🚀 Starting Vinted automation...');
-            
+
             // Inicjalizuj przeglądarkę
             await this.init();
-            
+
             // Przejdź na Vinted
             await this.navigateToVinted();
-            
+
             // Uruchom przetwarzanie wszystkich ogłoszeń
             await this.processAllAdvertisements(userId);
-            
+
         } catch (error) {
             console.error('❌ Error in Vinted automation:', error);
-            
+
             const errorMessage = error instanceof Error ? error.message : String(error);
-            
+
             if (errorMessage.includes('TimeoutError') || errorMessage.includes('Waiting for selector')) {
                 console.log('\n💡 Rozwiązania problemów:');
                 console.log('1. Sprawdź czy jesteś zalogowany na Vinted');
                 console.log('2. Sprawdź czy strona się w pełni załadowała');
                 console.log('3. Vinted może zmienić interfejs - spróbuj ręcznie');
                 console.log('4. Sprawdź połączenie internetowe');
-                
+
                 // Nie zamykaj przeglądarki od razu, daj użytkownikowi szansę na ręczną interakcję
                 await this.waitForUserInteraction('Możesz kontynuować ręcznie w przeglądarce', 120);
             }
@@ -3864,17 +4421,77 @@ export class VintedAutomation {
     async close() {
         // Wyczyść tymczasowe pliki
         await this.cleanupTempFiles();
-        
+
         if (this.browser) {
             await this.browser.close();
         }
     }
 }
 
+export async function preflightVintedExistingBrowser(): Promise<{ ok: boolean; message: string }> {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const response = await fetch('http://localhost:9222/json/version', {
+            method: 'GET',
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            return { ok: false, message: 'Port debug 9222 nie odpowiada. Najpierw kliknij "Uruchom Chrome do logowania".' };
+        }
+
+        const data = await response.json() as {
+            Browser?: string;
+            'User-Agent'?: string;
+            webSocketDebuggerUrl?: string;
+        };
+
+        const browserName = data?.Browser || '';
+        const userAgent = data?.['User-Agent'] || '';
+        const wsDebugger = data?.webSocketDebuggerUrl || '';
+
+        const looksLikeDevTools = wsDebugger.includes('/devtools/browser/');
+        const looksLikeChrome = /Chrome|Chromium|Edg/i.test(browserName);
+        const isHeadless = /HeadlessChrome/i.test(browserName) || /HeadlessChrome/i.test(userAgent);
+
+        if (!looksLikeDevTools || !looksLikeChrome) {
+            return { ok: false, message: 'Wykryto proces na 9222, ale to nie jest poprawny Chrome DevTools.' };
+        }
+
+        if (isHeadless) {
+            return { ok: false, message: 'Wykryto HeadlessChrome na porcie 9222. Uruchom zwykłe okno Chrome do logowania.' };
+        }
+
+        const browser = await puppeteer.connect({
+            browserURL: 'http://localhost:9222',
+            defaultViewport: null
+        });
+
+        try {
+            const pages = await browser.pages();
+            const hasAnyPage = pages.some(p => !p.isClosed());
+
+            if (!hasAnyPage) {
+                return { ok: false, message: 'Chrome debug działa, ale nie ma aktywnych kart. Otwórz kartę Vinted i spróbuj ponownie.' };
+            }
+
+            return { ok: true, message: 'Chrome debug jest gotowy do automatyzacji.' };
+        } finally {
+            await browser.disconnect();
+        }
+    } catch {
+        return { ok: false, message: 'Brak połączenia z Chrome debug na porcie 9222.' };
+    }
+}
+
 // Funkcja główna do uruchomienia automatyzacji
 export async function runVintedAutomation(userId?: string) {
     const automation = new VintedAutomation();
-    
+
     try {
         await automation.start(userId);
     } catch (error) {
@@ -3887,12 +4504,12 @@ export async function runVintedAutomation(userId?: string) {
 // Funkcja do uruchomienia z istniejącą przeglądarką
 export async function runVintedAutomationWithExistingBrowser(userId?: string) {
     const automation = new VintedAutomation();
-    
+
     try {
         await automation.startWithExistingBrowser(userId);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        
+
         // Nie pokazuj błędu jeśli Chrome został właśnie uruchomiony
         if (errorMessage !== 'CHROME_STARTED_PLEASE_LOGIN') {
             console.error('Vinted automation with existing browser failed:', error);
