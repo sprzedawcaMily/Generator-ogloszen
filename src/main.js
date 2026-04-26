@@ -1137,42 +1137,58 @@ async function init() {
         viewSwitch.appendChild(soldViewBtn);
         container.appendChild(viewSwitch);
 
-        const paginationContainer = document.createElement('div');
-        paginationContainer.style.cssText = 'margin: 8px 0 16px; display: flex; gap: 10px; justify-content: center; align-items: center;';
-        container.appendChild(paginationContainer);
+        const createPaginationControls = (marginStyle = 'margin: 8px 0 16px;') => {
+            const paginationContainer = document.createElement('div');
+            paginationContainer.style.cssText = `${marginStyle} display: flex; gap: 10px; justify-content: center; align-items: center;`;
 
-        const prevPageBtn = document.createElement('button');
-        prevPageBtn.textContent = '⬅ Poprzednia';
-        prevPageBtn.className = 'automation-btn';
-        prevPageBtn.style.cssText = 'background:#334155;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+            const prevPageBtn = document.createElement('button');
+            prevPageBtn.textContent = '⬅ Poprzednia';
+            prevPageBtn.className = 'automation-btn';
+            prevPageBtn.style.cssText = 'background:#334155;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
 
-        const pageInfo = document.createElement('span');
-        pageInfo.style.cssText = 'font-weight:700;color:#1f2937;';
+            const pageInfo = document.createElement('span');
+            pageInfo.style.cssText = 'font-weight:700;color:#1f2937;';
 
-        const nextPageBtn = document.createElement('button');
-        nextPageBtn.textContent = 'Następna ➡';
-        nextPageBtn.className = 'automation-btn';
-        nextPageBtn.style.cssText = 'background:#334155;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+            const nextPageBtn = document.createElement('button');
+            nextPageBtn.textContent = 'Następna ➡';
+            nextPageBtn.className = 'automation-btn';
+            nextPageBtn.style.cssText = 'background:#334155;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
 
-        const jumpToPageInput = document.createElement('input');
-        jumpToPageInput.type = 'number';
-        jumpToPageInput.min = '1';
-        jumpToPageInput.placeholder = 'nr strony';
-        jumpToPageInput.style.cssText = 'width:92px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-weight:600;';
+            const jumpToPageInput = document.createElement('input');
+            jumpToPageInput.type = 'number';
+            jumpToPageInput.min = '1';
+            jumpToPageInput.placeholder = 'nr strony';
+            jumpToPageInput.style.cssText = 'width:92px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-weight:600;';
 
-        const jumpToPageBtn = document.createElement('button');
-        jumpToPageBtn.textContent = 'Idź';
-        jumpToPageBtn.className = 'automation-btn';
-        jumpToPageBtn.style.cssText = 'background:#0f766e;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
+            const jumpToPageBtn = document.createElement('button');
+            jumpToPageBtn.textContent = 'Idź';
+            jumpToPageBtn.className = 'automation-btn';
+            jumpToPageBtn.style.cssText = 'background:#0f766e;color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
 
-        paginationContainer.appendChild(prevPageBtn);
-        paginationContainer.appendChild(pageInfo);
-        paginationContainer.appendChild(nextPageBtn);
-        paginationContainer.appendChild(jumpToPageInput);
-        paginationContainer.appendChild(jumpToPageBtn);
+            paginationContainer.appendChild(prevPageBtn);
+            paginationContainer.appendChild(pageInfo);
+            paginationContainer.appendChild(nextPageBtn);
+            paginationContainer.appendChild(jumpToPageInput);
+            paginationContainer.appendChild(jumpToPageBtn);
+
+            return {
+                paginationContainer,
+                prevPageBtn,
+                pageInfo,
+                nextPageBtn,
+                jumpToPageInput,
+                jumpToPageBtn,
+            };
+        };
+
+        const topPagination = createPaginationControls('margin: 8px 0 16px;');
+        container.appendChild(topPagination.paginationContainer);
 
         const cardsContainer = document.createElement('div');
         container.appendChild(cardsContainer);
+
+        const bottomPagination = createPaginationControls('margin: 16px 0 8px;');
+        container.appendChild(bottomPagination.paginationContainer);
 
         let currentView = 'active';
         const PAGE_SIZE = 35;
@@ -1189,7 +1205,8 @@ async function init() {
 
             if (!source.length) {
                 cardsContainer.innerHTML = `<div class="error">Brak ogłoszeń (${currentView === 'sold' ? 'sprzedane' : 'aktywne'})</div>`;
-                paginationContainer.style.display = 'none';
+                topPagination.paginationContainer.style.display = 'none';
+                bottomPagination.paginationContainer.style.display = 'none';
                 updateDebug(`Widok ${currentView}: brak danych`);
                 return;
             }
@@ -1201,13 +1218,19 @@ async function init() {
             const endIdx = Math.min(startIdx + PAGE_SIZE, source.length);
             const pageItems = source.slice(startIdx, endIdx);
 
-            paginationContainer.style.display = 'flex';
-            pageInfo.textContent = `Strona ${currentPage}/${totalPages} (${source.length} ogłoszeń)`;
-            jumpToPageInput.max = String(totalPages);
-            prevPageBtn.disabled = currentPage === 1;
-            nextPageBtn.disabled = currentPage === totalPages;
-            prevPageBtn.style.opacity = prevPageBtn.disabled ? '0.5' : '1';
-            nextPageBtn.style.opacity = nextPageBtn.disabled ? '0.5' : '1';
+            const updatePaginationState = (controls) => {
+                controls.paginationContainer.style.display = 'flex';
+                controls.pageInfo.textContent = `Strona ${currentPage}/${totalPages} (${source.length} ogłoszeń)`;
+                controls.jumpToPageInput.max = String(totalPages);
+                controls.jumpToPageInput.value = String(currentPage);
+                controls.prevPageBtn.disabled = currentPage === 1;
+                controls.nextPageBtn.disabled = currentPage === totalPages;
+                controls.prevPageBtn.style.opacity = controls.prevPageBtn.disabled ? '0.5' : '1';
+                controls.nextPageBtn.style.opacity = controls.nextPageBtn.disabled ? '0.5' : '1';
+            };
+
+            updatePaginationState(topPagination);
+            updatePaginationState(bottomPagination);
 
             for (let i = 0; i < pageItems.length; i++) {
                 const ad = pageItems[i];
@@ -1234,36 +1257,44 @@ async function init() {
             await renderCardsForCurrentView();
         };
 
-        prevPageBtn.onclick = async () => {
+        const goToPreviousPage = async () => {
             if (currentPage <= 1) return;
             currentPage -= 1;
             await renderCardsForCurrentView();
         };
 
-        nextPageBtn.onclick = async () => {
+        const goToNextPage = async () => {
             currentPage += 1;
             await renderCardsForCurrentView();
         };
 
-        const jumpToPage = async () => {
+        const jumpToPage = async (inputElement) => {
             const sourceRaw = currentView === 'sold' ? (data.soldAdvertisements || []) : (data.advertisements || []);
             const source = sourceRaw.filter((ad) => currentView === 'sold' ? isAdSold(ad) : !isAdSold(ad));
             const totalPages = Math.max(1, Math.ceil(source.length / PAGE_SIZE));
-            const requested = Number.parseInt(String(jumpToPageInput.value || '').trim(), 10);
+            const requested = Number.parseInt(String(inputElement.value || '').trim(), 10);
             if (!Number.isFinite(requested)) return;
             const nextPage = Math.min(Math.max(requested, 1), totalPages);
             currentPage = nextPage;
-            jumpToPageInput.value = String(nextPage);
+            topPagination.jumpToPageInput.value = String(nextPage);
+            bottomPagination.jumpToPageInput.value = String(nextPage);
             await renderCardsForCurrentView();
         };
 
-        jumpToPageBtn.onclick = jumpToPage;
-        jumpToPageInput.addEventListener('keydown', async (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                await jumpToPage();
-            }
-        });
+        const bindPaginationActions = (controls) => {
+            controls.prevPageBtn.onclick = goToPreviousPage;
+            controls.nextPageBtn.onclick = goToNextPage;
+            controls.jumpToPageBtn.onclick = () => jumpToPage(controls.jumpToPageInput);
+            controls.jumpToPageInput.addEventListener('keydown', async (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    await jumpToPage(controls.jumpToPageInput);
+                }
+            });
+        };
+
+        bindPaginationActions(topPagination);
+        bindPaginationActions(bottomPagination);
 
         setActiveViewButtons();
         await renderCardsForCurrentView();
